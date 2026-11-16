@@ -310,3 +310,21 @@ button { font-family: var(--font); cursor: pointer; border: none; color: inherit
 .guide b { color: #ffd0ea; }
 
 #screen-title .best-box { margin-top: auto; }
+
+/* ---------- タイトルロゴ（キラキラ） ---------- */
+.logo {
+  font-size: calc(44 * var(--u)); letter-spacing: 0.02em; line-height: 1.02;
+  background: linear-gradient(180deg, #fffbe6 0%, #ffe27a 35%, #ff9ad5 62%, #ff3d9a 100%);
+  -webkit-background-clip: text; background-clip: text; color: transparent;
+  text-shadow: none;
+  filter: drop-shadow(0 0 1px #fff) drop-shadow(0 0 1px #fff) drop-shadow(0 2px 0 #a3125e) drop-shadow(0 0 12px rgba(255, 60, 160, 0.85));
+}
+.logo-sub { color: #ffd6f0; text-shadow: 0 0 8px #ff4fb0; }
+.logo-catch {
+  background: linear-gradient(90deg, #ffe9a8, #fff, #ffd1ee); -webkit-background-clip: text; background-clip: text; color: transparent;
+  filter: drop-shadow(0 0 6px rgba(255, 200, 80, 0.9));
+}
+#screen-title { background: linear-gradient(180deg, rgba(20, 4, 40, 0.75), rgba(20, 4, 40, 0) 38%, rgba(20, 4, 40, 0) 62%, rgba(10, 2, 24, 0.9) 78%); }
+.controls { min-height: calc(20 * var(--u)); background: none; }
+.hud { background: linear-gradient(180deg, rgba(40, 8, 60, 0.9), rgba(20, 6, 40, 0.85)); border-color: rgba(255, 150, 210, 0.6); box-shadow: 0 0 18px rgba(255, 60, 160, 0.35); }
+.mode { font-size: calc(13 * var(--u)); letter-spacing: -0.1em; }

@@ -228,27 +228,21 @@
   }
 
   // ---------------------------------------------------------------- data
-  const CAST_ROSTER = [
-    { name: 'ミナ', dress: '#ff4f9e', hair: '#3a1e14', hl: '#ff9ccc' },
-    { name: 'レイ', dress: '#36d6e7', hair: '#141414', hl: '#a9f6ff' },
-    { name: 'サキ', dress: '#ffc23d', hair: '#7a4a1f', hl: '#ffe39a' },
-    { name: 'ユナ', dress: '#b67cff', hair: '#2a1a10', hl: '#dcc2ff' },
-    { name: 'アイ', dress: '#ff6b5a', hair: '#5a2e14', hl: '#ffc0b5' },
-    { name: 'ルカ', dress: '#7cf29a', hair: '#1c1c1c', hl: '#c9ffd8' },
-  ];
-  const ARRIVAL_LINES = ['{c}ちゃんと同伴〜♪', '今日も{c}ちゃんに会いに来たよ', '{c}ちゃん、一杯だけね', '{c}ちゃんとご飯行ってきた！'];
-  const COLORS = ['#4fc3f7', '#ffb74d', '#9575cd', '#81c784', '#e57373', '#4db6ac', '#90a4ae', '#7986cb', '#a1887f'];
+  const CAST_ROSTER = window.Art.CASTS;
+  const COLORS = ['#2b3a67', '#3a3a46', '#5a3e2b', '#4a4f5a', '#5b2a3a', '#2f4f4f', '#6b6b78', '#3d2f5a'];
+  const TIES = ['#b3263c', '#2a6fd6', '#d6a12a', '#7a2ab3', '#1f8a5b', '#d64f8a'];
   const HAIRS = ['#1b1b1b', '#3e2723', '#5d4037', '#262626', '#8d6e63', '#9e9e9e'];
 
   // レイアウト（論理座標）
-  const DOOR = { x: 294, y: 200, w: 58, h: 200 };
-  const ENTRY = { x: DOOR.x + 28, y: 412 };     // ドアを入ったところ
-  const COUNTER_TOP = 340;
+  const DOOR = { x: 294, y: 236, w: 58, h: 204 };
+  const ENTRY = { x: DOOR.x + 28, y: 452 };     // ドアを入ったところ
+  const COUNTER_TOP = 372;
   const CAST_HOME = [44, 104, 164];             // カウンターの中（逃げ込む場所）
   const PAIR_X = [52, 144, 236];                // カウンター席（客＋隣のキャスト）の中心
   const CUST_DX = -21, CAST_DX = 21;
-  const SEAT_Y = 446;                           // スツールの座面
-  const LOOK = { x: 214, y: 500 };              // 警察が店内を見回す位置
+  const SEAT_Y = 492;                           // スツールの座面
+  const SEAT_S = 1.15;                          // 座っている2人の拡大率
+  const LOOK = { x: 214, y: 552 };              // 警察が店内を見回す位置
 
   // ---------------------------------------------------------------- game state
   const STATE = { title: 'title', playing: 'playing', ending: 'ending', result: 'result' };
@@ -262,7 +256,7 @@
       elapsed: 0, min: 0, sales: 0, customers: 0, heat: 0,
       seats: Array(C.seats).fill(null),   // 着席中の客
       casts: Array(C.seats).fill(null),   // その客と同伴のキャスト
-      walkers: [], popups: [], particles: [],
+      walkers: [], popups: [], particles: [], fx: [], alertT: 0, heatFlash: 0,
       spawnT: 0.6, buzzLeft: 0, vipNext: 0, vipCount: 0,
       visit: null, visitT: rand(...C.visitIntervalSeconds),
       inspAt: (C.inspectionHour + 24 - C.openingHour) * 60 + rand(-C.inspectionJitterMinutes, C.inspectionJitterMinutes),
@@ -305,14 +299,14 @@
     const cast = { ...pick(free.length ? free : CAST_ROSTER), i, state: 'toBox', t: 0, dur: C.pairEnterSeconds, from: { ...ENTRY } };
     const look = {
       body: kind === 'vip' ? '#1c1c22' : COLORS[Math.floor(vrand() * COLORS.length)],
-      hair: HAIRS[Math.floor(vrand() * HAIRS.length)], skin: vrand() < 0.5 ? '#f1c7a5' : '#e0ac83', gold: kind === 'vip',
+      hair: HAIRS[Math.floor(vrand() * HAIRS.length)], skin: vrand() < 0.5 ? '#f6d3bb' : '#e8b896', gold: kind === 'vip',
+      tie: TIES[Math.floor(vrand() * TIES.length)],
     };
     const stay = rand(...C.staySeconds) * (kind === 'vip' ? 1.4 : 1);
     G.seats[i] = { kind, look, enterT: 0, stay, maxStay: stay, drinks: 0, drinking: 0, drinkMax: 1, glass: null, leaving: 0, cheer: 0, charged: false };
     G.casts[i] = cast;
     openDoor();
-    const line = kind === 'vip' ? `💎 ${cast.name}ちゃん、今日は飲むよ！` : pick(ARRIVAL_LINES).replace('{c}', cast.name);
-    popup(line, 250, 330, kind === 'vip' ? '#ffd54f' : '#ffd0ea', 1.3);
+    burst(kind === 'vip' ? '💎' : '💕', ENTRY.x - 14, 300, kind === 'vip' ? 1.3 : 0.9);
     return true;
   }
   function openDoor(t = 0.7) { G.doorT = Math.max(G.doorT, t); Sound.door(); }
@@ -338,7 +332,7 @@
     if (state !== STATE.playing || G.paused || !c) return;
     if (c.state === 'box' || c.state === 'toBox') {
       moveCast(c, 'counter'); G.stats.escapes++;
-      popup('🏃💨', castHome(c.i).x, 262, '#9be7ff', 0.7);
+      burst('💨', castHome(c.i).x + 14, 270, 0.6);
     } else if (c.state === 'counter') {
       if (G.seats[c.i]) moveCast(c, 'box');
     }
@@ -349,8 +343,8 @@
     if (state !== STATE.playing || G.paused) return;
     const b = G.seats[i]; if (!b || b.leaving || b.enterT < 1) return;
     const c = G.casts[i];
-    if (!c || c.state !== 'box') { popup('キャストがいないと…', custSeatFeet(i).x, 370, '#ccc', 0.8); Sound.tick(); return; }
-    if (b.drinking > 0) { popup('まだ飲んでる…', custSeatFeet(i).x, 370, '#ccc', 0.6); Sound.tick(); return; }
+    if (!c || c.state !== 'box') { burst('💔', custSeatFeet(i).x, 380, 0.6); b.nope = 0.3; Sound.tick(); return; }
+    if (b.drinking > 0) { b.nope = 0.3; Sound.tick(); return; }
     const d = C.drinks[Math.min(b.drinks, C.drinks.length - 1)];
     const price = d[2] * (b.kind === 'vip' ? C.vipDrinkMultiplier : 1);
     b.drinks++; G.stats.drinks++;
@@ -358,12 +352,12 @@
     b.stay = Math.max(b.stay, b.drinking + 0.6);
     G.heat = Math.min(100, G.heat + C.heatPerDrink);
     addSales(price, PAIR_X[i], 395, price >= 20000 ? '#ffd54f' : '#7CFFB2');
-    popup(`${d[0]} ${d[1]}！`, PAIR_X[i], 365, '#fff', 0.9);
+    burst(d[0], PAIR_X[i] - 12, 372, 0.6 + b.drinks * 0.12);
     b.cheer = 0.4;
     if (b.drinks >= C.drinks.length) {
       G.stats.towers++; Sound.tower(); G.shake = 0.15;
       b.leaving = b.drinking + 0.5;
-      popup('ごちそうさま〜♪', PAIR_X[i], 340, '#ff9ccc', 1.2);
+      burst('🥂', PAIR_X[i], 330, 1.5); for (let k = 0; k < 6; k++) burst('✨', PAIR_X[i] + (vrand() - 0.5) * 60, 330 + (vrand() - 0.5) * 40, 0.6);
     } else { Sound.pour(); Sound.coin(b.drinks); }
   }
 
@@ -390,7 +384,8 @@
     Music.tension(true);
     openDoor(enter + 0.2);
     Sound.steps();
-    if (reason === 'raid') { toast('🚨 警察だ！ 全員動くな！', 'red'); Sound.siren(); }
+    G.alertT = 1.2;
+    if (reason === 'raid') { burst('🚨', 180, 250, 2.0); Sound.siren(); }
   }
   function updateVisit(dt) {
     const v = G.visit;
@@ -400,7 +395,7 @@
       v.x = lerp(ENTRY.x, LOOK.x, e); v.y = lerp(ENTRY.y, LOOK.y, e);
       if (v.t > 0) return;
       v.phase = 'look'; v.t = C.policeInsideSeconds;
-      if (v.reason !== 'raid') toast(v.reason === 'inspection' ? '👮 警察です。立入調査を行います' : '👮 警察です。ちょっと中を見せてください', 'blue');
+      burst(v.reason === 'inspection' ? '📋' : '🔦', v.x, v.y - 120, 1.0);
       Sound.siren();
     }
     if (v.phase === 'look' || v.phase === 'exit') {
@@ -409,7 +404,7 @@
     }
     if (v.phase === 'look' && v.t <= 0) {
       v.phase = 'exit'; v.t = C.policeExitSeconds;
-      toast('👮「…ただのバーですね。失礼しました」', 'green');
+      burst('🙆', G.visit.x, G.visit.y - 120, 1.0);
       return;
     }
     if (v.phase === 'exit') {
@@ -420,7 +415,7 @@
       G.stats.passed++;
       G.heat = clamp(G.heat + C.heatAfterPassedVisit, 0, 100);
       Sound.relief();
-      msg('🚪 警察が帰った！ キャストをタップしてまた隣へ', '#ff9ccc');
+      burst('🆗', 180, 250, 1.6); for (let k = 0; k < 8; k++) burst('✨', 180 + (vrand() - 0.5) * 200, 250 + (vrand() - 0.5) * 100, 0.7);
       G.visit = null; Music.tension(false);
       const k = lerp(1, C.visitIntervalAtMaxHeat, G.heat / 100) * (G.crackdownT > 0 ? 0.5 : 1);
       G.visitT = rand(...C.visitIntervalSeconds) * k;
@@ -433,27 +428,27 @@
     G.outcome = 'bust'; state = STATE.ending; G.bustT = 0;
     Music.stop(0.25);
     G.caught = { name: cast.name, pos: castPos(cast), from: { x: G.visit.x, y: G.visit.y } };
-    toast('👮「…ん？ そこのお姉さん、ちょっといいですか？」', 'blue');
+
     Sound.warn();
-    setTimeout(() => { if (!G) return; Sound.siren(); G.shake = 0.6; G.flash = 1; toast(`🚨 ${cast.name}への聞き込みで発覚！ 無許可の接待営業で摘発！`, 'red'); }, 1500);
+    setTimeout(() => { if (!G) return; Sound.siren(); G.shake = 0.6; G.flash = 1; }, 1500);
     setTimeout(finish, 3300);
   }
 
   // ---------- events
   function runEvent(type) {
     switch (type) {
-      case 'buzz': G.buzzLeft = C.buzzExtraCustomers; G.spawnT = Math.min(G.spawnT, 0.3); toast('📱 SNSでバズった！ 同伴客が続々！', 'pink'); Sound.notify(); break;
+      case 'buzz': G.buzzLeft = C.buzzExtraCustomers; G.spawnT = Math.min(G.spawnT, 0.3); eventIcon('📱', '💕'); Sound.notify(); break;
       case 'vip':
         if (G.vipCount >= C.maxVipEvents) return;
         G.vipCount++; G.vipNext++; G.spawnT = Math.min(G.spawnT, 0.3);
-        toast('💎 VIPが同伴で来店予定！ お酒を勧めまくれ！', 'gold'); Sound.fanfare(); break;
+        eventIcon('💎', '✨'); Sound.fanfare(); break;
       case 'tipoff':
         G.heat = Math.min(100, G.heat + C.heatTipOff);
-        toast(`📢 元従業員がタレコミ！ 疑惑 +${C.heatTipOff}`, 'orange'); Sound.warn(); break;
-      case 'sleepy': G.sleepyT = C.sleepyLookoutSeconds; toast('😪 見張りが居眠り中… 警察に気づくのが遅れる！', 'orange'); Sound.notify(); break;
+        eventIcon('📢', '👁'); G.heatFlash = 1.2; Sound.warn(); break;
+      case 'sleepy': G.sleepyT = C.sleepyLookoutSeconds; eventIcon('😪', '💤'); Sound.notify(); break;
       case 'crackdown':
         G.crackdownT = C.crackdownSeconds; G.visitT = Math.min(G.visitT, rand(1.5, 3));
-        toast('🚓 繁華街の取り締まり強化中！ 警察が来やすい', 'orange'); Sound.notify(); break;
+        eventIcon('🚓', '🚨'); Sound.notify(); break;
     }
   }
 
@@ -468,7 +463,7 @@
     G.min = Math.min(TOTAL_MIN, (G.elapsed / C.gameDurationSeconds) * TOTAL_MIN);
     if (G.min >= TOTAL_MIN) {
       G.outcome = 'clear'; state = STATE.ending;
-      Sound.clear(); toast('🌅 朝5時！ 今夜も逃げ切った！', 'gold');
+      Sound.clear(); burst('🌅', 180, 260, 2.4);
       setTimeout(finish, 1500); return;
     }
     for (const e of G.events) if (!e.done && G.min >= e.at) { e.done = true; runEvent(e.type); }
@@ -528,6 +523,9 @@
     });
     G.walkers = G.walkers.filter((w) => w.alpha > 0);
     G.popups.forEach((p) => { p.y -= 30 * dt; p.life -= dt; });
+    G.fx.forEach((f) => { f.t += dt; }); G.fx = G.fx.filter((f) => f.t < f.life);
+    if (G.alertT > 0) G.alertT -= dt; if (G.heatFlash > 0) G.heatFlash -= dt;
+    G.seats.forEach((b) => { if (b && b.nope > 0) b.nope -= dt; });
     G.popups = G.popups.filter((p) => p.life > 0);
     G.particles.forEach((p) => { p.x += p.vx * dt; p.y += p.vy * dt; p.vy += 260 * dt; p.life -= dt; });
     G.particles = G.particles.filter((p) => p.life > 0);
@@ -571,6 +569,12 @@
     el.classList.add('show'); clearTimeout(msgTimer); msgTimer = setTimeout(() => el.classList.remove('show'), 1800);
   }
   function popup(text, x, y, color, life = 1.1) { G.popups.push({ text, x, y, color, life, max: life }); }
+  // 文字の代わりに絵文字がポンと弾ける演出
+  function burst(icon, x, y, size = 1) { if (G) G.fx.push({ icon, x, y, size, t: 0, life: 0.9 + size * 0.25 }); }
+  function eventIcon(main, sub) {
+    burst(main, 180, 250, 2.2);
+    for (let k = 0; k < 6; k++) { const a = (k / 6) * Math.PI * 2; burst(sub, 180 + Math.cos(a) * 70, 250 + Math.sin(a) * 45, 0.8); }
+  }
 
   const cache = {};
   function setText(id, v) { if (cache[id] !== v) { cache[id] = v; $(id).textContent = v; } }
@@ -585,9 +589,9 @@
     setText('hud-sales', yen(G.sales));
     setText('hud-cust', G.customers + '組');
     $('heat-fill').style.width = G.heat + '%';
-    $('heat-fill').className = G.heat > 80 ? 'hot' : G.heat > 50 ? 'warm' : '';
+    $('heat-fill').className = G.heat > 80 || G.heatFlash > 0 ? 'hot' : G.heat > 50 ? 'warm' : '';
     const st = G.casts.filter(castExposed).length;
-    setText('hud-mode', st ? `接待中 ${st}` : 'ただのバー');
+    setText('hud-mode', st ? '💗'.repeat(st) : '🍸');
     $('hud-mode').className = 'mode ' + (st ? 'settai' : 'bar');
   }
 
@@ -618,7 +622,7 @@
     Object.keys(cache).forEach((k) => delete cache[k]);
     $('toast-area').innerHTML = '';
     showScreen('game'); updateHUD();
-    toast(`🏮 ${STORE} 開店！ 表向きは、ただのバー`, 'pink');
+    burst('🍸', 180, 250, 1.8);
   }
   function goTitle() { state = STATE.title; G = null; renderTitle(); showScreen('title'); }
   async function afterResult(next) {
@@ -777,15 +781,15 @@
     const S = 2, off = document.createElement('canvas'); off.width = W * S; off.height = H * S;
     const c = off.getContext('2d'); c.scale(S, S);
     const r = mulberry32(777);
-    const wall = c.createLinearGradient(0, 0, 0, 400);
+    const wall = c.createLinearGradient(0, 0, 0, 430);
     wall.addColorStop(0, '#1a0f2e'); wall.addColorStop(1, '#2a1640');
-    c.fillStyle = wall; c.fillRect(0, 0, W, 400);
+    c.fillStyle = wall; c.fillRect(0, 0, W, 430);
     c.globalAlpha = 0.18; c.fillStyle = '#000';
-    for (let x = 0; x < W; x += 24) c.fillRect(x, 0, 2, 400);
+    for (let x = 0; x < W; x += 24) c.fillRect(x, 0, 2, 430);
     c.globalAlpha = 1;
-    c.fillStyle = '#120a1f'; c.fillRect(14, 160, 262, 120);
+    c.fillStyle = '#120a1f'; c.fillRect(14, 176, 262, 136);
     for (let row = 0; row < 3; row++) {
-      const sy = 198 + row * 36;
+      const sy = 218 + row * 40;
       c.fillStyle = '#5a3a22'; c.fillRect(14, sy, 262, 5);
       for (let x = 22; x < 268; x += 11 + r() * 6) {
         const h = 16 + r() * 12, col = ['#3d7a3a', '#7a2a2a', '#c99a3a', '#2a4a7a', '#9a9aa8', '#5a2a6a'][Math.floor(r() * 6)];
@@ -794,88 +798,27 @@
         c.globalAlpha = 0.35; c.fillStyle = '#fff'; c.fillRect(x + 1, sy - h + 2, 1.5, h - 4); c.globalAlpha = 1;
       }
     }
-    const floor = c.createLinearGradient(0, 400, 0, 640);
+    const floor = c.createLinearGradient(0, 430, 0, 640);
     floor.addColorStop(0, '#2b1b2e'); floor.addColorStop(1, '#100912');
-    c.fillStyle = floor; c.fillRect(0, 400, W, 240);
+    c.fillStyle = floor; c.fillRect(0, 430, W, 210);
     c.globalAlpha = 0.12; c.strokeStyle = '#ff9ccc'; c.lineWidth = 1;
-    for (let i = -8; i < 16; i++) { c.beginPath(); c.moveTo(180 + i * 40, 400); c.lineTo(180 + i * 90, 700); c.stroke(); }
+    for (let i = -8; i < 16; i++) { c.beginPath(); c.moveTo(180 + i * 40, 430); c.lineTo(180 + i * 90, 700); c.stroke(); }
     c.globalAlpha = 1;
     bgLayer = off;
   }
 
   // ---------- people
-  function drawHead(x, y, look, female) {
-    if (female) { ctx.fillStyle = look.hair; rr(x - 12, y - 8, 24, 30, 9); ctx.fill(); }
-    ctx.fillStyle = look.skin; ctx.beginPath(); ctx.arc(x, y, 10, 0, Math.PI * 2); ctx.fill();
-    ctx.fillStyle = look.hair; ctx.beginPath(); ctx.arc(x, y - 2, 10.5, Math.PI * 1.02, Math.PI * 1.98); ctx.fill();
-    drawEyes(x, y, female);
-    if (look.cap) {
-      ctx.fillStyle = '#16233f'; rr(x - 11, y - 15, 22, 8, 3); ctx.fill(); ctx.fillRect(x - 13, y - 8, 26, 3);
-      ctx.fillStyle = '#ffd54f'; ctx.fillRect(x - 2, y - 13, 4, 4);
-    }
-    if (look.gold) { ctx.fillStyle = '#ffd54f'; ctx.fillRect(x - 1.5, y + 13, 3, 12); }
-    if (female && look.hl) { ctx.fillStyle = look.hl; ctx.beginPath(); ctx.arc(x + 7, y - 7, 3, 0, Math.PI * 2); ctx.fill(); }
-  }
-  // 目（ときどき瞬き）
-  function drawEyes(x, y, female) {
-    const blink = (T * 0.9 + x * 0.013) % 3.2 < 0.12;
-    const ey = y + 1;
-    ctx.save();
-    if (blink) {
-      ctx.strokeStyle = '#2a1a1a'; ctx.lineWidth = 1.4; ctx.lineCap = 'round';
-      ctx.beginPath(); ctx.moveTo(x - 6, ey); ctx.lineTo(x - 2.5, ey); ctx.moveTo(x + 2.5, ey); ctx.lineTo(x + 6, ey); ctx.stroke();
-    } else if (female) {
-      [-4.2, 4.2].forEach((dx) => {
-        ctx.fillStyle = '#2a1520'; ctx.beginPath(); ctx.ellipse(x + dx, ey, 2.1, 2.9, 0, 0, Math.PI * 2); ctx.fill();
-        ctx.fillStyle = '#fff'; ctx.beginPath(); ctx.arc(x + dx + 0.7, ey - 1.1, 0.9, 0, Math.PI * 2); ctx.fill();
-        ctx.strokeStyle = '#1a0d12'; ctx.lineWidth = 1.2; ctx.beginPath(); ctx.moveTo(x + dx - 2.6, ey - 2.4); ctx.lineTo(x + dx + 2.6, ey - 3); ctx.stroke();
-      });
-      ctx.fillStyle = 'rgba(255,110,150,0.35)';
-      ctx.beginPath(); ctx.arc(x - 6, ey + 4, 2.2, 0, Math.PI * 2); ctx.arc(x + 6, ey + 4, 2.2, 0, Math.PI * 2); ctx.fill();
-    } else {
-      ctx.fillStyle = '#1e1414';
-      ctx.beginPath(); ctx.ellipse(x - 4, ey, 1.6, 2.1, 0, 0, Math.PI * 2); ctx.ellipse(x + 4, ey, 1.6, 2.1, 0, 0, Math.PI * 2); ctx.fill();
-    }
-    ctx.restore();
-  }
   function drawStanding(x, y, look, opts = {}) {
-    const bob = opts.walking ? Math.abs(Math.sin(opts.phase || 0)) * 2 : 0;
-    const sw = opts.walking ? Math.sin(opts.phase || 0) * 3 : 0;
-    ctx.fillStyle = 'rgba(0,0,0,0.35)'; ctx.beginPath(); ctx.ellipse(x, y + 2, 14, 4, 0, 0, Math.PI * 2); ctx.fill();
-    if (opts.female) {
-      ctx.fillStyle = look.skin; ctx.fillRect(x - 6 + sw, y - 22, 4, 22); ctx.fillRect(x + 2 - sw, y - 22, 4, 22);
-      ctx.fillStyle = look.body; ctx.beginPath(); ctx.moveTo(x - 8, y - 56 - bob); ctx.lineTo(x + 8, y - 56 - bob); ctx.lineTo(x + 15, y - 20); ctx.lineTo(x - 15, y - 20); ctx.closePath(); ctx.fill();
-    } else {
-      ctx.fillStyle = '#16141f'; ctx.fillRect(x - 8 + sw, y - 24, 6, 24); ctx.fillRect(x + 2 - sw, y - 24, 6, 24);
-      rr(x - 13, y - 58 - bob, 26, 36, 9); ctx.fillStyle = look.body; ctx.fill();
-    }
-    drawHead(x, y - 68 - bob, look, opts.female);
+    if (opts.female) Art.girlFront(ctx, x, y, opts.s || 1, look, T, opts);
+    else Art.manFront(ctx, x, y, opts.s || 1, look, T, opts);
   }
-  // 後ろ姿で座っている人（カウンターに向かっている）
   function drawBack(x, seatY, look, opts = {}) {
-    ctx.save(); ctx.translate(x, seatY); ctx.rotate(opts.lean || 0);
-    ctx.fillStyle = opts.female ? look.skin : '#16141f';
-    ctx.fillRect(-7, 2, 5, 20); ctx.fillRect(2, 2, 5, 20);
-    if (opts.female) {
-      ctx.fillStyle = look.body; ctx.beginPath(); ctx.moveTo(-9, -34); ctx.lineTo(9, -34); ctx.lineTo(14, 4); ctx.lineTo(-14, 4); ctx.closePath(); ctx.fill();
-    } else { rr(-14, -38, 28, 42, 10); ctx.fillStyle = look.body; ctx.fill(); ctx.fillStyle = 'rgba(0,0,0,0.18)'; ctx.fillRect(-1, -34, 2, 36); }
-    if (opts.arm) {
-      ctx.strokeStyle = opts.female ? look.skin : look.body; ctx.lineWidth = 5; ctx.lineCap = 'round';
-      ctx.beginPath(); ctx.moveTo(opts.arm * 9, -28); ctx.lineTo(opts.arm * 22, -24 + Math.sin(T * 5) * 2); ctx.stroke();
-    }
-    if (opts.drinkArm) {
-      ctx.strokeStyle = look.body; ctx.lineWidth = 5; ctx.lineCap = 'round';
-      ctx.beginPath(); ctx.moveTo(-9, -28); ctx.lineTo(-13, -46); ctx.stroke();
-      ctx.font = `11px ${FONT}`; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillText(opts.drinkArm, -14, -52);
-    }
-    ctx.fillStyle = look.skin; ctx.beginPath(); ctx.arc(-10, -46, 3, 0, Math.PI * 2); ctx.arc(10, -46, 3, 0, Math.PI * 2); ctx.fill();
-    ctx.fillStyle = look.hair; ctx.beginPath(); ctx.arc(0, -47, 10.5, 0, Math.PI * 2); ctx.fill();
-    if (opts.female) { rr(-11, -48, 22, 30, 8); ctx.fill(); if (look.hl) { ctx.fillStyle = look.hl; ctx.beginPath(); ctx.arc(-6, -54, 3, 0, Math.PI * 2); ctx.fill(); } }
-    if (look.gold) { ctx.fillStyle = '#ffd54f'; ctx.fillRect(-14, -12, 28, 3); }
-    ctx.restore();
+    if (opts.female) Art.girlBack(ctx, x, seatY, SEAT_S, look, T, opts);
+    else Art.manBack(ctx, x, seatY, SEAT_S, look, T, { lean: opts.lean, arm: opts.arm, drink: opts.drinkArm });
   }
-  const castLook = (c) => ({ body: c.dress, hair: c.hair, skin: '#f6d2b8', hl: c.hl });
-  const POLICE = { body: '#24345a', hair: '#111', skin: '#f1c7a5', cap: true };
+  const castLook = (c) => c;
+  const POLICE = { police: true, hair: '#141414', skin: '#f1c7a5' };
+  const MASTER = { vest: true, hair: '#8a8a8a', skin: '#ecc3a3' };
 
   function drawStool(x) {
     ctx.fillStyle = '#1a1a1a'; ctx.fillRect(x - 2, SEAT_Y + 4, 4, 36);
@@ -888,7 +831,7 @@
     const p = castHome(c.i);
     drawStanding(p.x, p.y, castLook(c), { female: true });
     if (state === STATE.playing && !G.visit) {
-      ctx.save(); ctx.globalAlpha = 0.6 + 0.4 * Math.sin(T * 6); label('👆隣へ', p.x, p.y - 92, '#ff9ccc'); ctx.restore();
+      finger(p.x + 10, p.y - 96, '💗');
     }
   }
 
@@ -906,8 +849,9 @@
     if (seated) {
       const lean = b.cheer > 0 ? Math.sin(T * 30) * 0.08 : withCast ? 0.06 : 0;
       const sip = b.drinking > 0 ? b.glass : null;
-      drawBack(ux, SEAT_Y, b.look, { lean, arm: withCast && !sip ? 1 : 0, drinkArm: sip });
-      if (b.kind === 'vip') label('💎', ux - 18, SEAT_Y - 60, '#fff', 12);
+      const nope = b.nope > 0 ? Math.sin(T * 60) * 0.06 : 0;
+      drawBack(ux, SEAT_Y, b.look, { lean: lean + nope, arm: withCast && !sip ? 1 : 0, drinkArm: sip });
+      if (b.kind === 'vip') { emoji('💎', ux - 16, SEAT_Y - 62, 13); Art.sparkle(ctx, ux + 10, SEAT_Y - 50, 3 + Math.sin(T * 6) * 1.5, 0.9, '#fff3b0'); }
       const p = clamp(b.stay / b.maxStay, 0, 1);
       ctx.fillStyle = 'rgba(255,255,255,0.2)'; ctx.fillRect(ux - 16, SEAT_Y + 46, 32, 3);
       ctx.fillStyle = '#ff9ccc'; ctx.fillRect(ux - 16, SEAT_Y + 46, 32 * p, 3);
@@ -915,25 +859,44 @@
         const q = 1 - b.drinking / b.drinkMax;
         ctx.fillStyle = 'rgba(0,0,0,0.6)'; rr(ux - 18, SEAT_Y + 54, 36, 7, 3); ctx.fill();
         ctx.fillStyle = '#ffd54f'; rr(ux - 17, SEAT_Y + 55, 34 * q, 5, 2); ctx.fill();
-        label('ゴクゴク…', ux, SEAT_Y + 70, '#fff', 9);
+
       } else if (withCast && !b.leaving && state === STATE.playing) {
         const next = C.drinks[Math.min(b.drinks, C.drinks.length - 1)];
-        ctx.save(); ctx.globalAlpha = 0.75 + 0.25 * Math.sin(T * 8);
-        label(b.drinks ? `👆おかわり${next[0]}` : `👆${next[0]}${next[1]}`, ux + 4, SEAT_Y + 62, '#ffe08a'); ctx.restore();
+        finger(ux, SEAT_Y - 82, next[0]);
       }
     }
     if (withCast) {
       drawBack(cx + CAST_DX, SEAT_Y, castLook(cast), { female: true, lean: -0.14, arm: -1 });
       ctx.save(); ctx.globalAlpha = 0.7 + 0.3 * Math.sin(T * 5); ctx.font = `11px ${FONT}`; ctx.textAlign = 'center';
       ctx.fillText('💗', cx, SEAT_Y - 66 + Math.sin(T * 3) * 3); ctx.restore();
-      label(cast.name, cx + CAST_DX + 2, SEAT_Y + 32, cast.hl, 9);
+
       if (G.visit && state === STATE.playing) {
         ctx.save(); ctx.strokeStyle = '#ff3355'; ctx.lineWidth = 3; ctx.globalAlpha = 0.5 + 0.5 * Math.sin(T * 18);
         ctx.beginPath(); ctx.arc(cx + CAST_DX, SEAT_Y - 30, 30, 0, Math.PI * 2); ctx.stroke(); ctx.restore();
+        emoji('❗', cx + CAST_DX, SEAT_Y - 86 + Math.sin(T * 14) * 3, 20);
       }
     }
   }
 
+  function emoji(ch, x, y, size) {
+    ctx.save(); ctx.font = `${size}px ${FONT}`; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillText(ch, x, y); ctx.restore();
+  }
+  // タップの合図（指が揺れる）＋何が起きるかのアイコン
+  function finger(x, y, icon) {
+    const b = Math.sin(T * 9) * 3;
+    ctx.save(); ctx.globalAlpha = 0.95;
+    ctx.fillStyle = 'rgba(255,255,255,0.92)'; ctx.beginPath(); ctx.arc(x, y + b, 11, 0, Math.PI * 2); ctx.fill();
+    ctx.strokeStyle = '#ff2e88'; ctx.lineWidth = 2; ctx.stroke();
+    emoji(icon, x, y + b + 1, 13);
+    emoji('👆', x + 9, y + b + 16 + Math.abs(Math.sin(T * 9)) * 3, 15);
+    ctx.restore();
+  }
+  function iconBubble(ch, x, y, color = '#fff', border = '#4d7cff') {
+    ctx.save(); const s = 1 + Math.sin(T * 8) * 0.06; ctx.translate(x, y); ctx.scale(s, s);
+    ctx.beginPath(); ctx.arc(0, 0, 15, 0, Math.PI * 2); ctx.fillStyle = color; ctx.fill(); ctx.strokeStyle = border; ctx.lineWidth = 2.5; ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(-4, 13); ctx.lineTo(0, 22); ctx.lineTo(5, 12); ctx.fill();
+    emoji(ch, 0, 1, 17); ctx.restore();
+  }
   function speech(text, x, y, color = '#fff', border = '#4d7cff') {
     ctx.save(); ctx.font = `bold 11px ${FONT}`;
     const w = ctx.measureText(text).width + 16, h = 24, bx = clamp(x - w / 2, 4, W - 4 - w);
@@ -949,9 +912,36 @@
     drawStanding(ENTRY.x + 4, ENTRY.y + 6, POLICE);
     drawStanding(x, y, POLICE, { walking: t < 1, phase: T * 12 });
     if (t >= 1) {
-      speech('お姉さん、ここで何してるの？', clamp(x - 20, 90, 270), y - 92);
-      if (G.bustT > 1.1) speech('えっと…お客さんの隣で接客を…', clamp(p.x, 100, 260), p.y - 64, '#ffe0ef', '#ff2e88');
+      iconBubble('❓', x + 4, y - 112);
+      if (G.bustT > 1.0) iconBubble('💦', p.x - 8, p.y - 100, '#ffe0ef', '#ff2e88');
     }
+  }
+
+  const SPARKS = Array.from({ length: 22 }, (_, i) => ({ x: (i * 73 + 20) % 350 + 5, y: (i * 131) % 430 + 90, p: i * 0.77, r: 1.6 + (i % 4) * 0.8 }));
+  const SPECKS = Array.from({ length: 16 }, (_, i) => ({ a: (i / 16) * Math.PI * 2, d: 70 + (i % 5) * 38, c: ['#ff9ccc', '#9be7ff', '#fff3b0', '#c9a6ff'][i % 4] }));
+  function drawMirrorBall() {
+    const bx = 236, by = 104;
+    ctx.strokeStyle = '#555'; ctx.lineWidth = 1; ctx.beginPath(); ctx.moveTo(bx, 70); ctx.lineTo(bx, by - 11); ctx.stroke();
+    const g = ctx.createRadialGradient(bx - 4, by - 4, 2, bx, by, 12); g.addColorStop(0, '#ffffff'); g.addColorStop(0.5, '#b9b6d0'); g.addColorStop(1, '#4a4766');
+    ctx.fillStyle = g; ctx.beginPath(); ctx.arc(bx, by, 11, 0, Math.PI * 2); ctx.fill();
+    ctx.strokeStyle = 'rgba(40,30,60,0.45)'; ctx.lineWidth = 0.6;
+    for (let k = -2; k <= 2; k++) { ctx.beginPath(); ctx.moveTo(bx - 11, by + k * 4.4); ctx.lineTo(bx + 11, by + k * 4.4); ctx.stroke(); }
+    for (let k = -2; k <= 2; k++) { const o = ((T * 8 + k * 4.4) % 22) - 11; ctx.beginPath(); ctx.moveTo(bx + o, by - 10); ctx.lineTo(bx + o, by + 10); ctx.stroke(); }
+    Art.sparkle(ctx, bx - 5, by - 5, 3 + Math.sin(T * 7) * 1.5, 0.9);
+    // 壁に映る光の粒
+    SPECKS.forEach((sp, i) => {
+      const a = sp.a + T * 0.35, x = bx + Math.cos(a) * sp.d * 1.4, y = by + 60 + Math.sin(a) * sp.d * 0.9;
+      if (y < 60 || y > 420) return;
+      ctx.fillStyle = sp.c; ctx.globalAlpha = 0.25 + 0.2 * Math.sin(T * 3 + i);
+      ctx.beginPath(); ctx.arc(x, y, 2.2, 0, Math.PI * 2); ctx.fill();
+    });
+    ctx.globalAlpha = 1;
+  }
+  function drawSparkles(alpha = 1) {
+    SPARKS.forEach((p) => {
+      const k = Math.max(0, Math.sin(T * 1.8 + p.p * 3));
+      if (k > 0.05) Art.sparkle(ctx, p.x, p.y, p.r * (0.6 + k), alpha * k);
+    });
   }
 
   function render(dt) {
@@ -966,8 +956,9 @@
     const lamp = ctx.createRadialGradient(140, 150, 10, 140, 150, 220);
     lamp.addColorStop(0, 'rgba(255,120,200,0.18)'); lamp.addColorStop(1, 'rgba(255,120,200,0)');
     ctx.fillStyle = lamp; ctx.fillRect(0, 0, W, 360);
-    neon(STORE, 145, 140, 22, '#ff5fb0', flick(1));
-    neon('♪', 26, 140, 18, '#3ff2ff', flick(2));
+    neon(STORE, 145, 152, 24, '#ff5fb0', flick(1));
+    neon('♪', 26, 152, 18, '#3ff2ff', flick(2));
+    drawMirrorBall();
 
     // ドア
     const open = G && G.doorT > 0;
@@ -987,13 +978,12 @@
     const ring = open ? Math.sin(T * 40) * 0.4 : 0;
     ctx.save(); ctx.translate(DOOR.x + DOOR.w - 8, DOOR.y - 2); ctx.rotate(ring);
     ctx.fillStyle = '#ffd54f'; ctx.beginPath(); ctx.moveTo(-5, 12); ctx.lineTo(5, 12); ctx.lineTo(3, 2); ctx.lineTo(-3, 2); ctx.closePath(); ctx.fill(); ctx.restore();
-    if (open && G && state === STATE.playing) label('カランコロン♪', DOOR.x + 22, DOOR.y - 14, '#ffe08a', 11);
+    if (open && G && state === STATE.playing) { emoji('🔔', DOOR.x + DOOR.w - 8 + Math.sin(T * 40) * 2, DOOR.y - 16, 16); emoji('♪', DOOR.x + 6, DOOR.y - 14 - (T * 30 % 14), 14); }
 
     // カウンターの中のキャスト
     if (G) G.casts.forEach((c) => { if (c && c.state === 'counter') drawHiddenCast(c); });
     // マスター
-    drawStanding(236, COUNTER_TOP + 10, { body: '#2b2b2b', hair: '#666', skin: '#e9bf9c' });
-    ctx.fillStyle = '#ff2e88'; ctx.fillRect(232, COUNTER_TOP - 54, 8, 4);
+    drawStanding(236, COUNTER_TOP + 10, MASTER);
 
     // カウンター
     ctx.fillStyle = '#6b3f22'; ctx.fillRect(0, COUNTER_TOP - 6, 284, 12);
@@ -1025,10 +1015,24 @@
           ctx.save(); ctx.globalAlpha = 0.16; ctx.fillStyle = '#fffbe0';
           const ang = Math.sin(T * 2.2) * 0.6 + Math.PI * 1.15;
           ctx.beginPath(); ctx.moveTo(v.x - 8, v.y - 50); ctx.arc(v.x - 8, v.y - 50, 300, ang - 0.2, ang + 0.2); ctx.closePath(); ctx.fill(); ctx.restore();
-          label('👀 じーっ…', v.x, v.y - 96, '#9be7ff', 11);
+          emoji('👀', v.x, v.y - 104, 18);
         }
       }
       G.particles.forEach((q) => { ctx.globalAlpha = clamp(q.life, 0, 1); ctx.fillStyle = q.c; ctx.fillRect(q.x, q.y, 3, 3); });
+      ctx.globalAlpha = 1;
+      G.fx.forEach((f) => {
+        const k = f.t / f.life, pop = k < 0.2 ? easeInOut(k / 0.2) * 1.25 : 1.25 - Math.min(0.25, (k - 0.2) * 1.2);
+        ctx.save(); ctx.globalAlpha = k > 0.7 ? (1 - k) / 0.3 : 1;
+        emoji(f.icon, f.x, f.y - k * 24, 26 * f.size * pop); ctx.restore();
+      });
+      // 警察が来た瞬間：画面の縁が赤青に光る＋🚨
+      if (v && state === STATE.playing) {
+        const on = Math.floor(T * 6) % 2;
+        const g = ctx.createRadialGradient(180, 320, 140, 180, 320, 380);
+        g.addColorStop(0, 'rgba(0,0,0,0)'); g.addColorStop(1, on ? 'rgba(255,30,60,0.55)' : 'rgba(30,90,255,0.55)');
+        ctx.fillStyle = g; ctx.fillRect(0, -OY, W, VH);
+        if (v.phase === 'enter') emoji('🚨', 330, 150 + Math.sin(T * 20) * 3, 30 + (G.alertT > 0 ? G.alertT * 14 : 0));
+      }
       ctx.globalAlpha = 1;
       G.popups.forEach((q) => {
         ctx.save(); ctx.globalAlpha = clamp((q.life / q.max) * 1.5, 0, 1);
@@ -1049,12 +1053,17 @@
         ctx.restore();
       }
       if (state === STATE.ending && G.outcome === 'clear') { ctx.fillStyle = 'rgba(255,200,140,0.25)'; ctx.fillRect(0, -OY, W, VH); }
+      drawSparkles(0.6);
     } else {
-      // タイトル背景：座っている同伴客
-      [[0, '#4fc3f7', 0], [2, '#e57373', 2]].forEach(([i, col, k]) => {
-        drawBack(PAIR_X[i] + CUST_DX, SEAT_Y, { body: col, hair: '#2a2a2a', skin: '#f1c7a5' }, { arm: 1, lean: 0.06 });
-        drawBack(PAIR_X[i] + CAST_DX, SEAT_Y, castLook(CAST_ROSTER[k]), { female: true, lean: -0.14, arm: -1 });
-      });
+      // タイトル：キャスト勢ぞろい
+      ctx.fillStyle = 'rgba(10,4,24,0.55)'; ctx.fillRect(0, -OY, W, VH);
+      const glow = ctx.createRadialGradient(180, 330, 10, 180, 330, 170);
+      glow.addColorStop(0, 'rgba(255,110,190,0.45)'); glow.addColorStop(1, 'rgba(255,110,190,0)');
+      ctx.fillStyle = glow; ctx.fillRect(0, 140, W, 360);
+      drawSparkles(1);
+      [[1, 64, 442, 1.85], [3, 296, 442, 1.85], [0, 128, 452, 2.05], [5, 232, 452, 2.05], [2, 180, 462, 2.3]].forEach(([k, x, y, sc]) =>
+        drawStanding(x, y, CAST_ROSTER[k], { female: true, s: sc }));
+      drawSparkles(0.8);
     }
     ctx.restore();
   }
