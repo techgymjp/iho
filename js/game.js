@@ -837,13 +837,16 @@
   });
   $('btn-retry').addEventListener('click', () => withInterstitial(startGame));
   $('btn-title').addEventListener('click', () => withInterstitial(goTitle));
-  $('btn-share').addEventListener('click', async () => {
-    if (!G) return;
+  // シェアする文章（結果に応じて変わる）
+  function shareText() {
     const redoTxt = G.redoUsed ? t('share.redo', { n: G.redoUsed }) : '';
-    const text = G.outcome === 'bust'
+    return G.outcome === 'bust'
       ? t('share.bust', { t: fmtTime(G.min), sales: yen(G.score.total), redo: redoTxt })
       : t('share.clear', { sales: yen(G.score.total), passed: G.stats.passed, redo: redoTxt, rank: G.score.rank });
-    const url = SHARE_URL;
+  }
+  $('btn-share').addEventListener('click', async () => {
+    if (!G) return;
+    const text = shareText(), url = SHARE_URL;
     const nativeShare = plugin('Share');
     try {
       if (nativeShare) await nativeShare.share({ title: t('share.title'), text, url, dialogTitle: t('share.dialog') });
@@ -851,6 +854,14 @@
       else { await navigator.clipboard.writeText(text + ' ' + url); const b = $('btn-share'); b.textContent = t('share.copied'); setTimeout(() => { b.textContent = t('res.share'); }, 1500); }
     } catch (e) { /* キャンセル */ }
   });
+  // web-only:start
+  // Web 版だけ：X（旧 Twitter）の投稿画面を開く（アプリは共有メニューから X を選べる）
+  $('btn-x').addEventListener('click', () => {
+    if (!G) return;
+    const q = new URLSearchParams({ text: shareText(), url: SHARE_URL });
+    window.open('https://x.com/intent/post?' + q.toString(), '_blank', 'noopener');
+  });
+  // web-only:end
   document.addEventListener('keydown', (e) => {
     if (state !== STATE.playing || !G || G.paused || e.repeat) return;
     if (['1', '2', '3'].includes(e.key)) tapCast(G.casts[+e.key - 1]);
