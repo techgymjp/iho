@@ -25,7 +25,8 @@
   const Ads = window.Ads;
   const REDO_MAX = 1;              // リワード広告の「もみ消し」は 1 ゲーム 1 回まで
   const SHARE_URL = 'https://techgym.jp/column/claude-code-game-iho/';   // シェアするページ（Web 版・アプリ共通）
-  const STORE = 'BAR 夜更し';
+  const t = (k, v) => window.I18N.t(k, v);
+  const storeName = () => t('store');
 
   // ---------------------------------------------------------------- utils
   function clamp(v, a, b) { return Math.max(a, Math.min(b, v)); }
@@ -520,13 +521,13 @@
   function showRedo() {
     if (!G || state !== STATE.ending) return;
     redoBusy = false; redoLeft = REDO_WAIT;
-    $('redo-watch').disabled = false; $('redo-watch').textContent = '▶ 広告を見て もみ消す';
-    $('redo-skip').textContent = `結果へ（${redoLeft}）`;
+    $('redo-watch').disabled = false; $('redo-watch').textContent = t('redo.watch');
+    $('redo-skip').textContent = t('redo.skip', { s: redoLeft });
     $('redo').classList.remove('hidden');
     clearInterval(redoTimer);
     redoTimer = setInterval(() => {
       if (redoBusy) return;
-      redoLeft--; $('redo-skip').textContent = `結果へ（${redoLeft}）`;
+      redoLeft--; $('redo-skip').textContent = t('redo.skip', { s: redoLeft });
       if (redoLeft <= 0) closeRedo(true);
     }, 1000);
   }
@@ -536,7 +537,7 @@
   }
   async function watchRedo() {
     if (redoBusy) return;
-    redoBusy = true; $('redo-watch').disabled = true; $('redo-watch').textContent = '読み込み中…';
+    redoBusy = true; $('redo-watch').disabled = true; $('redo-watch').textContent = t('redo.loading');
     const result = await Ads.showRewarded();
     if (result !== 'rewarded') { closeRedo(true); return; }
     closeRedo(false);
@@ -703,9 +704,9 @@
     if (!G) return;
     setText('hud-time', fmtTime(G.min));
     const rs = Math.max(0, Math.ceil(C.gameDurationSeconds - G.elapsed));
-    setText('hud-remain', `残り ${Math.floor(rs / 60)}:${String(rs % 60).padStart(2, '0')}`);
+    setText('hud-remain', t('hud.remain', { t: `${Math.floor(rs / 60)}:${String(rs % 60).padStart(2, '0')}` }));
     setText('hud-sales', yen(G.sales));
-    setText('hud-cust', G.customers + '組');
+    setText('hud-cust', t('unit.groups', { n: G.customers }));
     $('heat-fill').style.width = G.heat + '%';
     $('heat-fill').className = G.heat > 80 || G.heatFlash > 0 ? 'hot' : G.heat > 50 ? 'warm' : '';
     const st = G.casts.filter(castExposed).length;
@@ -715,19 +716,19 @@
 
   function showResult() {
     const r = G.score, bust = G.outcome === 'bust';
-    $('res-headline').textContent = bust ? '🚨 摘発…' : '🌅 今夜も逃げ切った！';
+    $('res-headline').textContent = bust ? t('res.bust') : t('res.clear');
     $('res-headline').className = 'res-headline ' + (bust ? 'bust' : 'clear');
     const news = $('res-news');
     news.classList.toggle('hidden', !bust);
-    if (bust) news.innerHTML = `<small>ネオン横丁新聞（架空）</small><b>「${STORE}」を摘発<br>バーと偽り 無許可で接待営業の疑い</b><span>${fmtTime(G.min)}ごろ、警察が店内に立ち入ったところ、女性従業員が客の隣に座って接客していたという。</span>`;
+    if (bust) news.innerHTML = `<small>${t('res.newsPaper')}</small><b>${t('res.newsHead', { store: storeName() })}</b><span>${t('res.newsBody', { t: fmtTime(G.min) })}</span>`;
     $('res-sales').textContent = yen(G.sales);
-    $('res-cust').textContent = G.customers + '組';
-    $('res-rank').textContent = r.rank + 'ランク'; $('res-rank').className = 'rank-' + r.rank;
-    $('res-pass').textContent = G.stats.passed + '回';
-    $('res-time').textContent = fmtTime(G.min) + 'まで';
-    $('res-best').textContent = G.newBest ? '🏆 NEW BEST SCORE!' : `BEST ${yen(Storage.data.bestScore)}`;
-    $('res-breakdown').textContent = `お酒 ${G.stats.drinks}杯（タワー ${G.stats.towers}回） ・ キャストを逃がした ${G.stats.escapes}回` + (G.redoUsed ? ` ・ もみ消し ${G.redoUsed}回` : '');
-    $('res-tip').innerHTML = '<b>💡 現実では</b> 客の隣に座って談笑・お酌をするなどの「接待」をする営業には、風俗営業の許可が必要とされています。許可なく接待営業を行うことは法律で禁止されています。<small>※本作はフィクションです。説明は一般的な内容を簡略化したものです。</small>';
+    $('res-cust').textContent = t('unit.groups', { n: G.customers });
+    $('res-rank').textContent = t('res.rankValue', { r: r.rank }); $('res-rank').className = 'rank-' + r.rank;
+    $('res-pass').textContent = t('res.times', { n: G.stats.passed });
+    $('res-time').textContent = t('res.until', { t: fmtTime(G.min) });
+    $('res-best').textContent = G.newBest ? t('res.newBest') : t('res.best', { v: yen(Storage.data.bestScore) });
+    $('res-breakdown').textContent = t('res.breakdown', { d: G.stats.drinks, t: G.stats.towers, e: G.stats.escapes }) + (G.redoUsed ? t('res.redo', { n: G.redoUsed }) : '');
+    $('res-tip').innerHTML = t('res.tip');
     showScreen('result');
   }
 
@@ -758,8 +759,8 @@
   function renderTitle() {
     const d = Storage.data;
     $('title-best').textContent = yen(d.bestScore);
-    $('title-stats').textContent = d.plays ? `プレイ ${d.plays}回 ・ 累計売上 ${yen(d.totalSales)}` : '';
-    $('btn-sound').textContent = d.sound ? '🔊 サウンド ON' : '🔇 サウンド OFF';
+    $('title-stats').textContent = d.plays ? t('title.stats', { plays: d.plays, sales: yen(d.totalSales) }) : '';
+    $('btn-sound').textContent = d.sound ? t('title.soundOn') : t('title.soundOff');
   }
   function modal(html, buttons) {
     const box = $('modal-box');
@@ -769,17 +770,17 @@
       $('modal').classList.add('hidden'); Sound.tick(); const f = buttons[+el.dataset.i].onClick; if (f) f();
     }));
   }
-  const PLAY_TIME = C.gameDurationSeconds % 60 === 0 ? `${C.gameDurationSeconds / 60}分` : `${C.gameDurationSeconds}秒`;
-  const HOWTO = `
-    <h2>遊び方</h2>
-    <p class="howto-lead">朝5時まで<b>${PLAY_TIME}</b>、<br>摘発されずに稼げ！</p>
+  const playTime = () => (C.gameDurationSeconds % 60 === 0 ? t('time.min', { n: C.gameDurationSeconds / 60 }) : t('time.sec', { n: C.gameDurationSeconds }));
+  const howto = () => `
+    <h2>${t('howto.title')}</h2>
+    <p class="howto-lead">${t('howto.lead', { time: playTime() })}</p>
     <div class="howto">
-      <div><span>👆</span><p><b>客をタップ</b><br>お酒で売上UP</p></div>
-      <div><span>🔔</span><p><b>ドアの音</b>に注意<br>👮警察かも！</p></div>
-      <div><span>💃</span><p><b>キャストをタップ</b><br>カウンターへ逃がす</p></div>
-      <div><span>🚨</span><p>聞き込みされたら<br><b>摘発！</b></p></div>
+      <div><span>👆</span><p>${t('howto.tapGuest')}</p></div>
+      <div><span>🔔</span><p>${t('howto.door')}</p></div>
+      <div><span>💃</span><p>${t('howto.tapCast')}</p></div>
+      <div><span>🚨</span><p>${t('howto.bust')}</p></div>
     </div>
-    <p class="small">※フィクションです。無許可営業は法律で禁止されています。</p>`;
+    <p class="small">${t('howto.note')}</p>`;
 
   // ---------------------------------------------------------------- input
   const canvas = $('scene'), ctx = canvas.getContext('2d');
@@ -815,18 +816,18 @@
   function pause() {
     if (state !== STATE.playing || !G || G.paused) return;
     G.paused = true;
-    modal('<h2>一時停止中</h2>', [
-      { label: '再開', onClick: () => withInterstitial(() => { if (G) G.paused = false; }) },
-      { label: 'タイトルへ', cls: 'btn-ghost', onClick: () => withInterstitial(goTitle) },
+    modal(`<h2>${t('pause.title')}</h2>`, [
+      { label: t('pause.resume'), onClick: () => withInterstitial(() => { if (G) G.paused = false; }) },
+      { label: t('pause.toTitle'), cls: 'btn-ghost', onClick: () => withInterstitial(goTitle) },
     ]);
   }
   $('btn-pause').addEventListener('click', pause);
   $('btn-start').addEventListener('click', () => {
     Sound.init();
-    if (!Storage.data.tutorialDone) modal(HOWTO, [{ label: '開店！', onClick: () => { Storage.data.tutorialDone = true; Storage.save(); withInterstitial(startGame); } }]);
+    if (!Storage.data.tutorialDone) modal(howto(), [{ label: t('howto.open'), onClick: () => { Storage.data.tutorialDone = true; Storage.save(); withInterstitial(startGame); } }]);
     else withInterstitial(startGame);
   });
-  $('btn-howto').addEventListener('click', () => { Sound.init(); modal(HOWTO, [{ label: 'OK', onClick: () => withInterstitial(() => {}) }]); });
+  $('btn-howto').addEventListener('click', () => { Sound.init(); modal(howto(), [{ label: t('howto.ok'), onClick: () => withInterstitial(() => {}) }]); });
   $('redo-watch').addEventListener('click', watchRedo);
   $('redo-skip').addEventListener('click', () => { if (!redoBusy) closeRedo(true); });
   $('btn-sound').addEventListener('click', () => {
@@ -838,16 +839,16 @@
   $('btn-title').addEventListener('click', () => withInterstitial(goTitle));
   $('btn-share').addEventListener('click', async () => {
     if (!G) return;
-    const redoTxt = G.redoUsed ? `・もみ消し${G.redoUsed}回` : '';
+    const redoTxt = G.redoUsed ? t('share.redo', { n: G.redoUsed }) : '';
     const text = G.outcome === 'bust'
-      ? `【摘発カウントダウン】${fmtTime(G.min)}に摘発されました…売上${yen(G.score.total)}${redoTxt} #摘発カウントダウン`
-      : `【摘発カウントダウン】朝まで逃げ切った！売上${yen(G.score.total)}・警察を${G.stats.passed}回やり過ごし${redoTxt}・${G.score.rank}ランク #摘発カウントダウン`;
+      ? t('share.bust', { t: fmtTime(G.min), sales: yen(G.score.total), redo: redoTxt })
+      : t('share.clear', { sales: yen(G.score.total), passed: G.stats.passed, redo: redoTxt, rank: G.score.rank });
     const url = SHARE_URL;
     const nativeShare = plugin('Share');
     try {
-      if (nativeShare) await nativeShare.share({ title: '摘発カウントダウン', text, url, dialogTitle: '結果をシェア' });
+      if (nativeShare) await nativeShare.share({ title: t('share.title'), text, url, dialogTitle: t('share.dialog') });
       else if (navigator.share) await navigator.share({ text, url });
-      else { await navigator.clipboard.writeText(text + ' ' + url); const b = $('btn-share'); b.textContent = 'コピーしました'; setTimeout(() => { b.textContent = '結果をシェア'; }, 1500); }
+      else { await navigator.clipboard.writeText(text + ' ' + url); const b = $('btn-share'); b.textContent = t('share.copied'); setTimeout(() => { b.textContent = t('res.share'); }, 1500); }
     } catch (e) { /* キャンセル */ }
   });
   document.addEventListener('keydown', (e) => {
@@ -1100,7 +1101,7 @@
     const lamp = ctx.createRadialGradient(140, 150, 10, 140, 150, 220);
     lamp.addColorStop(0, 'rgba(255,120,200,0.18)'); lamp.addColorStop(1, 'rgba(255,120,200,0)');
     ctx.fillStyle = lamp; ctx.fillRect(0, 0, W, 360);
-    neon(STORE, 145, 152, 24, '#ff5fb0', flick(1));
+    neon(storeName(), 145, 152, 24, '#ff5fb0', flick(1));
     neon('♪', 26, 152, 18, '#3ff2ff', flick(2));
     drawMirrorBall();
 
@@ -1193,7 +1194,7 @@
         ctx.save(); ctx.translate(180, 250); ctx.scale(0.5 + s * 0.6, 0.5 + s * 0.6); ctx.rotate(-0.12);
         ctx.fillStyle = '#d4001e'; rr(-110, -34, 220, 68, 8); ctx.fill();
         ctx.strokeStyle = '#fff'; ctx.lineWidth = 4; rr(-104, -28, 208, 56, 6); ctx.stroke();
-        ctx.font = `900 40px ${FONT}`; ctx.fillStyle = '#fff'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillText('摘 発 ！', 0, 2);
+        ctx.font = `900 40px ${FONT}`; ctx.fillStyle = '#fff'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillText(t('stamp'), 0, 2);
         ctx.restore();
       }
       if (state === STATE.ending && G.outcome === 'clear') { ctx.fillStyle = 'rgba(255,200,140,0.25)'; ctx.fillRect(0, -OY, W, VH); }
@@ -1227,6 +1228,10 @@
 
   // ブラウザの制約で、最初のタップ時にBGMを開始する
   document.addEventListener('pointerdown', () => Sound.init(), { once: false, passive: true });
+  // 言語の切り替え（タイトル画面）
+  document.querySelectorAll('[data-lang]').forEach((el) => el.addEventListener('click', () => { Sound.init(); Sound.tick(); I18N.setLang(el.dataset.lang); }));
+  I18N.onChange(() => { renderTitle(); if (state === STATE.result) showResult(); });
+  I18N.apply();
   Storage.load(); resize(); buildBG(); renderTitle();
   requestAnimationFrame(frame);
 

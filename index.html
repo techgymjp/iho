@@ -17,21 +17,22 @@
   <!-- ===== TITLE ===== -->
   <section id="screen-title" class="screen active">
     <div class="title-logo">
-      <div class="logo-sub">架空の繁華街「ネオン横丁」</div>
-      <h1 class="logo">摘発<br>カウントダウン</h1>
-      <div class="logo-catch">表向きは、ただのバー。</div>
+      <div class="logo-sub" data-i18n="title.sub">架空の繁華街「ネオン横丁」</div>
+      <h1 class="logo" data-i18n-html="title.logo">摘発<br>カウントダウン</h1>
+      <div class="logo-catch" data-i18n="title.catch">表向きは、ただのバー。</div>
     </div>
     <div class="best-box">BEST SCORE <b id="title-best">0</b><small id="title-stats"></small></div>
     <button class="btn btn-primary btn-big" id="btn-start">START</button>
     <div class="title-row">
-      <button class="btn btn-ghost" id="btn-howto">遊び方</button>
+      <button class="btn btn-ghost" id="btn-howto" data-i18n="title.howto">遊び方</button>
       <button class="btn btn-ghost" id="btn-sound">🔊 サウンド ON</button>
     </div>
-    <p class="disclaimer">※本作はフィクションです。実在の人物・団体・店舗・事件とは関係ありません。現実の無許可営業は法律で禁止されています。</p>
+    <div class="lang-sel"><button class="lang-btn" data-lang="ja">日本語</button><button class="lang-btn" data-lang="en">English</button></div>
+    <p class="disclaimer" data-i18n="title.disclaimer">※本作はフィクションです。実在の人物・団体・店舗・事件とは関係ありません。現実の無許可営業は法律で禁止されています。</p>
     <div id="legal" class="legal hidden">
       <span id="build-info"></span>
-      <a href="https://techgym.jp/privacy-policy/" target="_blank" rel="noopener">プライバシーポリシー</a>
-      <span id="ad-privacy" class="hidden">｜<a href="#" id="ad-privacy-link">広告の設定</a></span>
+      <a href="https://techgym.jp/privacy-policy/" data-i18n-href="url.privacy" data-i18n="legal.privacy" target="_blank" rel="noopener">プライバシーポリシー</a>
+      <span id="ad-privacy" class="hidden">｜<a href="#" id="ad-privacy-link" data-i18n="legal.adSettings">広告の設定</a></span>
     </div>
   </section>
 
@@ -40,8 +41,8 @@
     <header class="hud">
       <div class="hud-row">
         <div class="hud-time"><span id="hud-time">22:00</span><small id="hud-remain">残り 3:00</small></div>
-        <div class="hud-cell"><label>売上</label><span id="hud-sales">¥0</span></div>
-        <div class="hud-cell"><label>来客数</label><span id="hud-cust">0人</span></div>
+        <div class="hud-cell"><label data-i18n="hud.sales">売上</label><span id="hud-sales">¥0</span></div>
+        <div class="hud-cell"><label data-i18n="hud.customers">来客数</label><span id="hud-cust">0人</span></div>
         <button id="btn-pause" class="btn-pause" aria-label="一時停止">⏸</button>
       </div>
       <div class="gauge-wrap">
@@ -63,21 +64,21 @@
     <div class="result-card">
       <div id="res-headline" class="res-headline"></div>
       <div id="res-news" class="res-news hidden"></div>
-      <div class="res-sales"><span id="res-sales">¥0</span><small>本日の売上 ＝ SCORE</small></div>
+      <div class="res-sales"><span id="res-sales">¥0</span><small data-i18n="res.sales">本日の売上 ＝ SCORE</small></div>
       <div class="res-grid">
-        <div><small>来客数</small><b id="res-cust"></b></div>
-        <div><small>最終ランク</small><b id="res-rank"></b></div>
-        <div><small>警察をやり過ごした</small><b id="res-pass"></b></div>
-        <div><small>営業時間</small><b id="res-time"></b></div>
+        <div><small data-i18n="res.customers">来客数</small><b id="res-cust"></b></div>
+        <div><small data-i18n="res.rank">最終ランク</small><b id="res-rank"></b></div>
+        <div><small data-i18n="res.passed">警察をやり過ごした</small><b id="res-pass"></b></div>
+        <div><small data-i18n="res.time">営業時間</small><b id="res-time"></b></div>
       </div>
       <div class="res-best" id="res-best"></div>
       <div class="res-breakdown" id="res-breakdown"></div>
       <div id="res-tip" class="res-tip"></div>
       <div class="res-buttons">
-        <button class="btn btn-primary" id="btn-retry">RETRY</button>
-        <button class="btn btn-ghost" id="btn-title">TITLE</button>
+        <button class="btn btn-primary" id="btn-retry" data-i18n="res.retry">RETRY</button>
+        <button class="btn btn-ghost" id="btn-title" data-i18n="res.title">TITLE</button>
       </div>
-      <button class="btn btn-ghost btn-share" id="btn-share">結果をシェア</button>
+      <button class="btn btn-ghost btn-share" id="btn-share" data-i18n="res.share">結果をシェア</button>
     </div>
   </section>
 
@@ -93,6 +94,7 @@
   </div>
 </div>
 <script src="js/config.js"></script>
+<script src="js/i18n.js"></script>
 <script src="js/ads-config.js"></script>
 <script src="js/build-info.js"></script>
 <script src="js/ads.js"></script>

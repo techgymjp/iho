@@ -13,7 +13,7 @@ Play Console の「ストアの掲載情報」に貼り付けて使います。�
 | スマートフォンのスクリーンショット（日本語） | `ja-1-title.png` 〜 `ja-6-result.png` | 1080 × 1920 |
 | スマートフォンのスクリーンショット（英語） | `en-1-title.png` 〜 `en-6-result.png` | 1080 × 1920 |
 
-ゲーム画面の文字は日本語だけです（英語のスクリーンショットは、上の見出しだけ英語）。
+ゲームは日本語・英語に対応しています（端末の言語で自動切り替え）。英語のスクリーンショットは英語の画面です。
 
 ---
 
@@ -62,6 +62,7 @@ Play Console の「ストアの掲載情報」に貼り付けて使います。�
 ・スコアは売上高。S ランクを目指そう
 ・結果を友だちにシェア
 ・オフラインでも遊べる（広告・シェアは通信が必要）
+・日本語・英語対応
 
 朝5時まで、摘発されずに逃げ切れるか！？
 
@@ -116,7 +117,7 @@ Is it a customer… or the police?!
 • Your score is your sales. Aim for rank S!
 • Share your results with friends
 • Plays offline (ads and sharing need a connection)
-• The in-game text is in Japanese
+• English and Japanese
 
 Can you keep the bar open until 5 AM without getting busted?
 
