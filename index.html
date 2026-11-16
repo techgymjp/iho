@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover">
 <meta name="theme-color" content="#07040f">
-<meta name="description" content="架空の繁華街「ネオン横丁」で朝まで適法営業！45秒のワンタップ経営ゲーム。">
+<meta name="description" content="表向きは、ただのバー。警察が来たらキャストをカウンターへ！45秒のワンタップ偽装経営ゲーム。">
 <title>摘発カウントダウン</title>
 <link rel="manifest" href="manifest.webmanifest">
 <link rel="icon" href="icon.svg" type="image/svg+xml">
@@ -19,16 +19,15 @@
     <div class="title-logo">
       <div class="logo-sub">架空の繁華街「ネオン横丁」</div>
       <h1 class="logo">摘発<br>カウントダウン</h1>
-      <div class="logo-catch">朝まで逃げ切れるか！？</div>
+      <div class="logo-catch">表向きは、ただのバー。</div>
     </div>
     <div class="best-box">BEST SCORE <b id="title-best">0</b><small id="title-stats"></small></div>
-    <div class="type-select" id="type-select"></div>
     <button class="btn btn-primary btn-big" id="btn-start">START</button>
     <div class="title-row">
       <button class="btn btn-ghost" id="btn-howto">遊び方</button>
-      <button class="btn btn-ghost" id="btn-sound">🔊 ON</button>
+      <button class="btn btn-ghost" id="btn-sound">🔊 サウンド ON</button>
     </div>
-    <p class="disclaimer">※本作はフィクションです。実在の人物・団体・店舗・事件とは関係ありません。ゲーム内ルールは法令を簡略化した架空のルールであり、法律上の判断を代替するものではありません。</p>
+    <p class="disclaimer">※本作はフィクションです。実在の人物・団体・店舗・事件とは関係ありません。現実の無許可営業は法律で禁止されています。</p>
     <div class="ad-banner" id="ad-banner">AD ・ AdMob バナー枠</div>
   </section>
 
@@ -39,64 +38,45 @@
         <div class="hud-time"><span id="hud-time">22:00</span><small id="hud-remain">残り 45秒</small></div>
         <div class="hud-cell"><label>売上</label><span id="hud-sales">¥0</span></div>
         <div class="hud-cell"><label>来客数</label><span id="hud-cust">0人</span></div>
-      </div>
-      <div class="hud-row">
-        <div class="hud-cell"><label>営業状態</label><span id="hud-status" class="status ok">適法</span></div>
-        <div class="hud-cell"><label>資金</label><span id="hud-funds">¥0</span></div>
-        <button id="btn-quit" class="btn-quit">営業終了</button>
+        <button id="btn-pause" class="btn-pause" aria-label="一時停止">⏸</button>
       </div>
       <div class="gauge-wrap">
-        <label>🚨 立入調査まで</label>
-        <div class="gauge"><div id="gauge-fill"></div></div>
+        <label>👁 疑惑</label>
+        <div class="gauge"><div id="heat-fill"></div></div>
+        <span id="hud-mode" class="mode">バー営業</span>
       </div>
-      <div class="license-row" id="hud-license"></div>
     </header>
 
+    <div id="alarm" class="alarm hidden">
+      <div class="alarm-text" id="alarm-text">🚪 コンコン！ 誰か来た…</div>
+      <div class="alarm-bar"><div id="alarm-fill"></div></div>
+    </div>
     <div id="toast-area"></div>
     <div id="msg-line" class="msg-line"></div>
 
     <footer class="controls">
-      <div class="ctl-row">
-        <button id="btn-check" class="ctl ctl-side"><span class="ico">🔍</span><span>営業確認</span></button>
-        <button id="btn-serve" class="ctl ctl-main"><span class="ico">🍸</span><span>接客する</span></button>
-      </div>
-      <div class="comp-wrap">
-        <label>コンプライアンス</label>
-        <div class="gauge comp"><div id="comp-fill"></div></div>
-        <b id="comp-val">100</b>
-      </div>
+      <div class="ctl-hint">👆 客をタップでお酒 ／ 👮警察ならキャストをタップでカウンターの中へ</div>
+      <button id="btn-seat" class="ctl ctl-main"><span class="ico">🚪</span><span>案内する<small>カウンター席へ（キャストが隣に）</small></span></button>
     </footer>
   </section>
-
-  <!-- ===== INVESTIGATION / CORRECTION ===== -->
-  <div id="inv" class="inv hidden">
-    <div class="inv-flash"></div>
-    <div class="inv-box">
-      <div class="inv-title" id="inv-title">🚨 警察による立入調査です</div>
-      <div class="inv-sub" id="inv-sub">営業許可と営業実態の整合性を確認します</div>
-      <ul class="inv-list" id="inv-list"></ul>
-      <div class="inv-result" id="inv-result"></div>
-      <button class="btn btn-primary btn-big" id="inv-btn">確認する</button>
-    </div>
-  </div>
 
   <!-- ===== RESULT ===== -->
   <section id="screen-result" class="screen">
     <div class="result-card">
       <div id="res-headline" class="res-headline"></div>
-      <div class="res-type" id="res-type"></div>
-      <div class="res-sales"><span id="res-sales">¥0</span><small>総売上</small></div>
+      <div id="res-news" class="res-news hidden"></div>
+      <div class="res-sales"><span id="res-sales">¥0</span><small>本日の売上</small></div>
       <div class="res-grid">
         <div><small>来客数</small><b id="res-cust"></b></div>
         <div><small>最終ランク</small><b id="res-rank"></b></div>
-        <div><small>コンプライアンス</small><b id="res-comp"></b></div>
-        <div><small>営業達成時間</small><b id="res-time"></b></div>
+        <div><small>警察をやり過ごした</small><b id="res-pass"></b></div>
+        <div><small>営業時間</small><b id="res-time"></b></div>
       </div>
       <div class="res-score">SCORE <span id="res-score"></span><small>/100</small></div>
       <div class="res-best" id="res-best"></div>
       <div class="res-breakdown" id="res-breakdown"></div>
       <div id="res-tip" class="res-tip"></div>
-      <button class="btn btn-reward" id="btn-double">▶ 広告を見てスコア2倍（任意）</button>
+      <button class="btn btn-reward" id="btn-double">▶ 広告を見て獲得ポイント2倍（任意）</button>
       <div class="res-buttons">
         <button class="btn btn-primary" id="btn-retry">RETRY</button>
         <button class="btn btn-ghost" id="btn-title">TITLE</button>

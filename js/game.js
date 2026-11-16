@@ -1,28 +1,24 @@
 /* =========================================================
- * 摘発カウントダウン - Web版 MVP
- * 架空の繁華街「ネオン横丁」を舞台にしたワンタップ経営ゲーム。
- * 実在の人物・店舗・事件とは無関係のフィクションです。
+ * 摘発カウントダウン - Web版
+ * 表向きは「ただのバー」。実は無許可で接待営業をしている架空の店。
+ * 警察が来たら、客の隣に座っているキャストをタップしてカウンターへ戻せ！
+ * 本作はフィクションです。実在の人物・店舗・事件とは関係ありません。
  * ========================================================= */
 (() => {
   'use strict';
   const C = window.CONFIG;
   const W = 360, H = 640;              // 論理解像度（9:16）
-  const TOTAL_MIN = C.gameHours * 60;  // 420分
+  const TOTAL_MIN = C.gameHours * 60;
   const params = new URLSearchParams(location.search);
   const SPEED = clamp(parseFloat(params.get('speed')) || 1, 0.25, 20); // テスト用
   const NO_ADS = params.get('noads') === '1';
+  const STORE = 'BAR 夜更し';
 
   // ---------------------------------------------------------------- utils
   function clamp(v, a, b) { return Math.max(a, Math.min(b, v)); }
+  function lerp(a, b, t) { return a + (b - a) * t; }
   function yen(n) { return (n < 0 ? '-' : '') + '¥' + Math.abs(Math.round(n)).toLocaleString('ja-JP'); }
   function $(id) { return document.getElementById(id); }
-  function lerp(a, b, t) { return a + (b - a) * t; }
-  function mixColor(c1, c2, t) {
-    const p = (c) => [1, 3, 5].map((i) => parseInt(c.slice(i, i + 2), 16));
-    const a = p(c1), b = p(c2);
-    return 'rgb(' + a.map((v, i) => Math.round(lerp(v, b[i], t))).join(',') + ')';
-  }
-  // 乱数シード注入可能（?seed=123 でイベントを再現できる）
   function mulberry32(a) {
     return function () {
       a |= 0; a = (a + 0x6D2B79F5) | 0;
@@ -31,21 +27,21 @@
       return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
     };
   }
-  let rng = Math.random;
+  let rng = Math.random;                       // ?seed=123 で再現可能
   const rand = (a, b) => a + rng() * (b - a);
   const randInt = (a, b) => Math.floor(rand(a, b + 1));
   const pick = (arr) => arr[Math.floor(rng() * arr.length)];
-  const vrand = Math.random; // 見た目だけの乱数（ゲーム結果に影響しない）
+  const vrand = Math.random;                    // 見た目専用
 
   // ---------------------------------------------------------------- storage
   const Storage = {
-    key: 'tekihatsu_countdown_v1',
-    data: { bestScore: 0, plays: 0, totalSales: 0, totalPoints: 0, sound: true, tutorialDone: false, lastType: 'generalRestaurant' },
+    key: 'tekihatsu_countdown_v2',
+    data: { bestScore: 0, plays: 0, totalSales: 0, totalPoints: 0, sound: true, tutorialDone: false, sinceAd: 0 },
     load() { try { const d = JSON.parse(localStorage.getItem(this.key)); if (d) Object.assign(this.data, d); } catch (e) { /* noop */ } },
     save() { try { localStorage.setItem(this.key, JSON.stringify(this.data)); } catch (e) { /* noop */ } },
   };
 
-  // ---------------------------------------------------------------- sound (WebAudio 生成音)
+  // ---------------------------------------------------------------- sound
   const Sound = {
     ctx: null,
     get on() { return Storage.data.sound; },
@@ -62,517 +58,413 @@
       g.gain.setValueAtTime(vol, t); g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
       o.connect(g).connect(this.ctx.destination); o.start(t); o.stop(t + dur + 0.05);
     },
-    bell() { this.tone(1568, 0.25, 'sine', 0.06); this.tone(2093, 0.3, 'sine', 0.05, 0.08); },
-    coin() { this.tone(988, 0.07, 'square', 0.06); this.tone(1319, 0.16, 'square', 0.06, 0.06); },
-    refuse() { this.tone(520, 0.08, 'triangle', 0.08); this.tone(390, 0.12, 'triangle', 0.08, 0.08); },
-    notify() { this.tone(880, 0.1, 'sine', 0.1); this.tone(660, 0.16, 'sine', 0.1, 0.1); },
-    fanfare() { [523, 659, 784, 1047].forEach((f, i) => this.tone(f, 0.16, 'triangle', 0.1, i * 0.09)); },
+    bell() { this.tone(1568, 0.25, 'sine', 0.05); this.tone(2093, 0.3, 'sine', 0.04, 0.08); },
+    coin(p = 0) { this.tone(988 + p * 120, 0.06, 'square', 0.05); this.tone(1319 + p * 160, 0.14, 'square', 0.05, 0.05); },
+    pour() { this.tone(500, 0.12, 'sine', 0.06, 0, 900); },
+    tower() { [784, 988, 1175, 1568, 1976].forEach((f, i) => this.tone(f, 0.18, 'triangle', 0.08, i * 0.07)); },
+    knock() { this.tone(140, 0.07, 'square', 0.18); this.tone(140, 0.07, 'square', 0.18, 0.16); },
+    whoosh() { this.tone(900, 0.12, 'sine', 0.06, 0, 300); },
+    notify() { this.tone(880, 0.1, 'sine', 0.08); this.tone(660, 0.16, 'sine', 0.08, 0.1); },
+    fanfare() { [523, 659, 784, 1047].forEach((f, i) => this.tone(f, 0.16, 'triangle', 0.09, i * 0.09)); },
     clear() { [523, 659, 784, 1047, 1319].forEach((f, i) => this.tone(f, 0.25, 'triangle', 0.1, i * 0.12)); },
-    warn() { for (let i = 0; i < 3; i++) this.tone(220, 0.18, 'square', 0.07, i * 0.22); },
-    siren() { for (let i = 0; i < 3; i++) this.tone(650, 0.42, 'sawtooth', 0.05, i * 0.45, 1050); },
-    tick() { this.tone(1200, 0.03, 'square', 0.04); },
-    bad() { this.tone(150, 0.3, 'sawtooth', 0.09); },
+    warn() { for (let i = 0; i < 3; i++) this.tone(220, 0.16, 'square', 0.06, i * 0.2); },
+    siren() { for (let i = 0; i < 4; i++) this.tone(650, 0.42, 'sawtooth', 0.06, i * 0.45, 1050); },
+    tick() { this.tone(1200, 0.03, 'square', 0.035); },
+    relief() { this.tone(400, 0.2, 'sine', 0.08, 0, 600); this.tone(600, 0.25, 'sine', 0.08, 0.18, 900); },
   };
 
-  // ---------------------------------------------------------------- ads（Web版はダミー。失敗してもゲームは継続）
+  // ---------------------------------------------------------------- ads（Web版はダミー。失敗してもゲーム継続）
   const Ads = {
     available() { return C.ads.enabled && !NO_ADS; },
-    showInterstitial() {
-      if (!this.available()) return Promise.resolve(false);
-      return showAdOverlay('インタースティシャル広告', C.ads.interstitialSeconds, false).catch(() => false);
-    },
-    showRewarded() {
-      if (!this.available()) return Promise.resolve(false);
-      return showAdOverlay('リワード広告', C.ads.rewardedSeconds, true).catch(() => false);
-    },
+    showInterstitial() { return this.available() ? showAdOverlay('インタースティシャル広告', C.ads.interstitialSeconds, false).catch(() => false) : Promise.resolve(false); },
+    showRewarded() { return this.available() ? showAdOverlay('リワード広告', C.ads.rewardedSeconds, true).catch(() => false) : Promise.resolve(false); },
   };
   function showAdOverlay(kind, secs, rewarded) {
     return new Promise((resolve) => {
       const ov = $('ad-overlay'), close = $('ad-close'), count = $('ad-count');
       $('ad-kind').textContent = kind;
       ov.classList.remove('hidden'); close.classList.add('hidden');
-      let left = secs;
-      count.textContent = left + '秒';
+      let left = secs; count.textContent = left + '秒';
       const done = (ok) => { clearInterval(iv); ov.classList.add('hidden'); close.onclick = null; resolve(ok); };
       const iv = setInterval(() => {
         left--;
         if (left > 0) { count.textContent = left + '秒'; return; }
         clearInterval(iv);
         count.textContent = rewarded ? '報酬を獲得しました！' : '';
-        close.classList.remove('hidden');
-        close.onclick = () => done(true);
+        close.classList.remove('hidden'); close.onclick = () => done(true);
       }, 1000);
-      if (rewarded) { // 報酬なしで閉じることも可能（視聴を強制しない）
-        close.classList.remove('hidden');
-        close.onclick = () => done(left <= 0);
-      }
+      if (rewarded) { close.classList.remove('hidden'); close.onclick = () => done(left <= 0); }
     });
   }
 
   // ---------------------------------------------------------------- data
-  const BUSINESS = {
-    generalRestaurant: {
-      name: '一般飲食店', store: 'BAR 夜更し',
-      license: '許可：飲食店営業（深夜酒類提供 届出済）',
-      desc: '接待なし。記録の不整合が起きにくい堅実経営。',
-      services: ['飲食提供'],
-      entertainmentAllowed: false,
-    },
-    entertainmentWithService: {
-      name: '接待を伴う飲食店', store: 'Lounge 月灯',
-      license: '許可：接待飲食等営業（ゲーム内設定）／深夜帯は接待不可',
-      desc: '接待で客単価UP。ただし管理項目が多く、0時以降は接待できない。',
-      services: ['飲食提供', '接待（0時まで）'],
-      entertainmentAllowed: true,
-    },
+  const CUSTOMER_TEXTS = {
+    normal: ['一杯だけ飲みたいな', 'ここ初めてなんだけど', '仕事終わり〜', '終電逃しちゃった'],
+    wants: ['隣に誰かついてくれる？', 'かわいい子いる？', '今日は飲むぞー！'],
+    vip: ['💎 一番いい席を頼むよ'],
+    undercover: ['…一人。ここ、どんな店？', '…静かに飲みたいんだが'],
   };
-
-  const KINDS = {
-    normal: { icon: '🍺', texts: ['ハイボールください', '一杯だけ飲みたい', 'カウンター空いてる？', '終電逃した〜'] },
-    group: { icon: '👥', texts: ['3名いけます？', '二次会で来ました！'] },
-    settai: { icon: '🗣️', texts: ['隣で話し相手になってよ', 'お酌してくれる人いる？'] },
-    dance: { icon: '💃', texts: ['朝まで踊れる？', 'DJ呼んで盛り上げて！'] },
-    minor: { icon: '🎒', texts: ['20歳っす…たぶん', '身分証？忘れました'] },
-    vip: { icon: '💎', texts: ['VIP：一番いい酒を頼むよ'] },
-  };
-
-  const ISSUES = [
-    { name: '営業記録の記入漏れ', item: 'records' },
-    { name: '従業員名簿の未更新', item: 'docs' },
-    { name: '料金表の掲示漏れ', item: 'docs' },
-    { name: '許可証の掲示漏れ', item: 'license' },
-    { name: '年齢確認記録の不備', item: 'records' },
-    { name: '客席の照度不足', item: 'actual' },
+  const FALSE_VISITORS = [
+    { icon: '🍕', name: 'ピザの配達', line: '宅配ピザでーす！…あれ、違う店？' },
+    { icon: '🍶', name: '酔っ払い', line: 'ういっく…トイレどこぉ？' },
+    { icon: '📦', name: '酒屋の配達', line: 'まいど！おしぼりとお酒です' },
+    { icon: '🐱', name: '野良猫', line: 'にゃー' },
+    { icon: '🧹', name: '隣の店のママ', line: 'ちょっと氷貸してくれない？' },
   ];
-  const INV_ITEMS = [
-    { key: 'license', label: '営業許可の内容' },
-    { key: 'actual', label: '実際の営業内容' },
-    { key: 'records', label: '営業記録' },
-    { key: 'docs', label: '必要書類の整備' },
+  const CASTS = [
+    { name: 'ミナ', dress: '#ff4f9e', hair: '#3a1e14', hl: '#ff9ccc' },
+    { name: 'レイ', dress: '#36d6e7', hair: '#141414', hl: '#a9f6ff' },
+    { name: 'サキ', dress: '#ffc23d', hair: '#7a4a1f', hl: '#ffe39a' },
   ];
-  const TIPS = {
-    settai: '客の隣に座って談笑・お酌をするなどの「接待」を行う営業には、風俗営業の許可が必要とされています。',
-    minor: '20歳未満の者への酒類の提供は法律で禁止されています。年齢確認は基本中の基本です。',
-    dance: '深夜（0時〜6時）に酒類を提供しながら客に遊興をさせる営業には、特定遊興飲食店営業の許可が必要とされています。',
-    late: '深夜（0時〜6時）に主として酒類を提供する飲食店は、公安委員会への届出が必要とされています。',
-    records: '許可の内容と実際の営業内容が一致していること、記録や書類が整っていることが、適法な営業の土台です。',
-    night: '風俗営業の許可を受けた店でも、深夜の営業時間は原則として制限されています。',
-  };
+  const COLORS = ['#4fc3f7', '#ffb74d', '#9575cd', '#81c784', '#e57373', '#4db6ac', '#90a4ae', '#7986cb', '#a1887f'];
+  const HAIRS = ['#1b1b1b', '#3e2723', '#5d4037', '#262626', '#8d6e63', '#9e9e9e'];
 
-  const STATE = { title: 'title', playing: 'playing', investigation: 'investigation', correction: 'correction', gameOver: 'gameOver', result: 'result' };
+  // レイアウト（論理座標）
+  const DOOR = { x: 294, y: 200, w: 58, h: 200 };
+  const QUEUE = [{ x: 322, y: 486 }, { x: 344, y: 478 }, { x: 366, y: 472 }];
+  const COUNTER_TOP = 340;
+  const CAST_HOME = [44, 104, 164];             // カウンター内（バーテンとして立つ位置）
+  const PAIR_X = [52, 144, 236];                // カウンター席（客＋隣のキャスト）の中心
+  const CUST_DX = -21, CAST_DX = 21;
+  const SEAT_Y = 446;                           // スツールの座面
 
-  // ---------------------------------------------------------------- game
+  // ---------------------------------------------------------------- game state
+  const STATE = { title: 'title', playing: 'playing', ending: 'ending', result: 'result' };
   let state = STATE.title;
   let G = null;
-  let businessType = 'generalRestaurant';
-
-  const QX = [228, 260, 292, 324, 356];
-  const DOOR_X = 180, FEET_Y = 486;
-  const COLORS = ['#e94e77', '#4fc3f7', '#ffb74d', '#9575cd', '#81c784', '#f06292', '#4db6ac', '#ffd54f', '#90a4ae', '#7986cb'];
-  const HAIRS = ['#1b1b1b', '#3e2723', '#5d4037', '#c9a66b', '#262626', '#8d6e63'];
 
   function newGame() {
-    const seedParam = params.get('seed');
-    rng = seedParam !== null ? mulberry32(parseInt(seedParam, 10) || 0) : Math.random;
-    const B = BUSINESS[businessType];
+    const seed = params.get('seed');
+    rng = seed !== null ? mulberry32(parseInt(seed, 10) || 0) : Math.random;
     G = {
-      B, type: businessType,
-      elapsed: 0, min: 0, lastHour: 0,
-      sales: 0, customers: 0, lost: 0, funds: C.initialFunds, compliance: C.initialCompliance,
-      issues: [], refusedKinds: {}, servedSettai: 0,
-      queue: [], leaving: [], popups: [], particles: [],
-      spawnT: 0.4, serveCD: 0, checking: 0,
-      buzzLeft: 0, vipCount: 0,
+      elapsed: 0, min: 0,
+      sales: 0, customers: 0, heat: 0,
+      queue: [], seats: Array(C.seats).fill(null),
+      walkers: [], popups: [], particles: [],
+      casts: CASTS.map((c, i) => ({ ...c, i, state: 'counter', t: 1, from: null, target: 'counter', dur: 1 })),
+      spawnT: 0.5, buzzLeft: 0, vipCount: 0,
+      visit: null, visitT: rand(C.visitIntervalSeconds[0] + 1.5, C.visitIntervalSeconds[1] + 1.5),
+      inspAt: (C.inspectionHour + 24 - C.openingHour) * 60 + rand(-C.inspectionJitterMinutes, C.inspectionJitterMinutes),
+      inspected: false, sleepyT: 0,
       events: scheduleEvents(),
-      invAt: (C.investigationHour + 24 - C.openingHour) * 60 + rand(-C.investigationJitterMinutes, C.investigationJitterMinutes),
-      investigated: false, suspended: false, completed: false, outcome: null,
-      paused: false, shake: 0, police: 0, flash: 0,
+      stats: { passed: 0, falseAlarms: 0, drinks: 0, towers: 0 },
+      outcome: null, paused: false, shake: 0, flash: 0, bustT: 0,
     };
   }
 
   function scheduleEvents() {
     const n = randInt(C.minRandomEvents, C.maxRandomEvents);
-    const pool = ['buzz', 'vip', 'failure', 'complaint', 'licenseCheck'];
+    const pool = ['buzz', 'vip', 'undercover', 'tipoff', 'sleepy'];
     const list = []; let prev = null, vips = 0;
     for (let i = 0; i < n; i++) {
-      let t; let guard = 0;
+      let t, guard = 0;
       do { t = pick(pool); guard++; } while ((t === prev || (t === 'vip' && vips >= C.maxVipEvents)) && guard < 50);
       if (t === 'vip') vips++;
       prev = t; list.push(t);
     }
-    // 均等に近い間隔で配置（調査時間帯 0.66〜0.78 付近は避ける）
-    const slots = [];
-    for (let i = 0; i < n; i++) {
-      let f = 0.07 + (0.86 * (i + rand(0.15, 0.85))) / n;
-      if (f > 0.66 && f < 0.78) f = f < 0.72 ? 0.64 : 0.8;
-      slots.push(f);
-    }
-    slots.sort((a, b) => a - b);
-    return list.map((type, i) => ({ type, at: slots[i] * TOTAL_MIN, done: false }));
+    return list.map((type, i) => ({ type, at: (0.08 + (0.84 * (i + rand(0.2, 0.8))) / n) * TOTAL_MIN, done: false }));
   }
 
-  function nowHour() { return (C.openingHour + Math.floor(G.min / 60)) % 24; }
-  function isLateNight() { return G.min >= (24 - C.openingHour) * 60; } // 0:00以降
+  // 「カウンター」以外の状態（隣に座っている／移動中）は警察に見られたらアウト
+  const castExposed = (c) => c.state !== 'counter';
+  const settaiCount = () => G.casts.filter((c) => c.state === 'box').length;
 
   // ---------- customers
-  function spawnCustomer(forceKind) {
-    if (G.queue.length >= C.maxVisibleCustomers) {
-      if (forceKind !== 'vip') return;
-      const out = G.queue.pop(); out.state = 'leave'; out.tx = 430; G.leaving.push(out);
-    }
-    let kind = forceKind;
-    if (!kind) {
-      const ent = G.B.entertainmentAllowed;
-      const table = [
-        ['normal', 0.5], ['group', 0.13], ['settai', ent ? 0.24 : 0.14], ['minor', 0.09],
-        ['dance', isLateNight() ? 0.12 : 0],
-      ];
-      const total = table.reduce((s, r) => s + r[1], 0);
-      let r = rng() * total;
-      kind = 'normal';
-      for (const [k, w] of table) { if ((r -= w) < 0) { kind = k; break; } }
-    }
-    const K = KINDS[kind];
-    const stay = rand(C.minStaySeconds, C.maxStaySeconds) * (kind === 'vip' ? 1.5 : 1);
-    const c = {
-      kind, icon: K.icon, text: pick(K.texts),
-      x: 400 + vrand() * 20, tx: 400, y: FEET_Y, alpha: 1, state: 'queue',
-      stay, maxStay: stay, phase: vrand() * 6,
-      color: kind === 'vip' ? '#1c1c22' : kind === 'minor' ? '#2c3e75' : COLORS[Math.floor(vrand() * COLORS.length)],
+  function makeCustomer(kind) {
+    const look = {
+      body: kind === 'vip' ? '#1c1c22' : kind === 'undercover' ? '#b59a6a' : COLORS[Math.floor(vrand() * COLORS.length)],
       hair: HAIRS[Math.floor(vrand() * HAIRS.length)],
       skin: vrand() < 0.5 ? '#f1c7a5' : '#e0ac83',
-      group: kind === 'group',
+      glasses: kind === 'undercover', gold: kind === 'vip',
     };
-    G.queue.push(c);
+    const textKey = kind === 'normal' ? (rng() < 0.45 ? 'wants' : 'normal') : kind;
+    const wait = rand(C.minWaitSeconds, C.maxWaitSeconds) * (kind === 'vip' ? 1.5 : 1);
+    return { kind, look, text: pick(CUSTOMER_TEXTS[textKey]), wait, maxWait: wait, x: 400, y: QUEUE[0].y, alpha: 1, phase: vrand() * 6 };
+  }
+  function spawnCustomer(kind = 'normal') {
+    if (G.queue.length >= C.maxWaiting) {
+      if (kind === 'normal') return;
+      const out = G.queue.pop(); leaveToDoor(out);
+    }
+    G.queue.push(makeCustomer(kind));
     Sound.bell();
   }
-
-  function sendAway(c, dir = 1) { c.state = 'leave'; c.tx = dir > 0 ? 440 : -60; G.leaving.push(c); }
-
-  function addIssue(name) {
-    let issue;
-    if (name) issue = ISSUES.find((i) => i.name === name) || { name, item: 'actual' };
-    else {
-      const fresh = ISSUES.filter((i) => !G.issues.some((x) => x.name === i.name));
-      issue = pick(fresh.length ? fresh : ISSUES);
-    }
-    G.issues.push(issue);
-    popup('📋 ' + issue.name, 180, 300, '#ffcc66', 1.6);
+  function leaveToDoor(c) {
+    G.walkers.push({ look: c.look, x: c.x || 300, y: c.y || 420, tx: DOOR.x + 28, ty: DOOR.y + DOOR.h, alpha: 1, phase: 0 });
   }
 
-  function makeSale(amount, count, x) {
-    G.sales += amount; G.funds += amount; G.customers += count;
-    popup('+' + yen(amount), x, 410, amount >= C.vipCustomerSales ? '#ffd54f' : '#7CFFB2');
-    for (let i = 0; i < 6; i++) G.particles.push({ x, y: 430, vx: (vrand() - 0.5) * 120, vy: -60 - vrand() * 80, life: 0.8, c: '#ffd54f' });
-    Sound.coin();
-    if (rng() < C.issueChance[G.type]) addIssue();
-  }
-
-  // 「接客する」：許可された営業サービスの範囲内でのみ接客。許可外の要望は自動的にお断りする。
-  function serve() {
+  function seatGuest() {
     if (state !== STATE.playing || G.paused) return;
-    if (G.checking > 0) { msg('🔍 営業確認中…入口を閉めています', '#ffcc66'); Sound.tick(); return; }
-    if (G.serveCD > 0) return;
     const c = G.queue[0];
-    if (!c || !c.arrived) { Sound.tick(); return; }
-    G.serveCD = C.serveCooldown;
+    if (!c || Math.abs(c.x - QUEUE[0].x) > 6) { Sound.tick(); return; }
+    const i = G.seats.indexOf(null);
+    if (i < 0) { msg('カウンターは満席です', '#ffcc66'); Sound.tick(); return; }
     G.queue.shift();
-    const enter = () => { c.state = 'enter'; c.tx = DOOR_X; G.leaving.push(c); };
-    const refuse = (reason, tipKey, orderInstead) => {
-      G.refusedKinds[tipKey] = (G.refusedKinds[tipKey] || 0) + 1;
-      if (orderInstead && rng() < 0.5) {
-        msg(`✋ ${reason} → 通常の飲食でご案内`, '#9be7ff');
-        enter(); makeSale(C.normalCustomerSales, 1, c.x);
-      } else {
-        msg(`✋ ${reason}`, '#9be7ff');
-        sendAway(c); Sound.refuse();
-        popup('お断り ✓', c.x, 420, '#9be7ff');
-      }
-    };
-    switch (c.kind) {
-      case 'normal': enter(); makeSale(C.normalCustomerSales, 1, c.x); break;
-      case 'group': enter(); makeSale(C.groupCustomerSales, C.groupSize, c.x); break;
-      case 'vip': enter(); makeSale(C.vipCustomerSales, 1, c.x); break;
-      case 'minor': refuse('年齢確認：20歳未満の可能性のため酒類は提供できません', 'minor', false); break;
-      case 'dance': refuse('深夜の遊興サービスは許可の範囲外です', 'dance', true); break;
-      case 'settai':
-        if (G.B.entertainmentAllowed && !isLateNight()) {
-          enter(); G.servedSettai++; makeSale(C.entertainmentSales, 1, c.x);
-          msg('🗣️ 許可の範囲内で接待サービス', '#ff9ad5');
-        } else if (G.B.entertainmentAllowed) {
-          refuse('深夜帯は接待できません（営業時間の制限）', 'night', true);
-        } else {
-          refuse('当店は一般飲食店のため接待はできません', 'settai', true);
-        }
-        break;
+    const stay = rand(...C.staySeconds) * (c.kind === 'vip' ? 1.4 : 1);
+    G.seats[i] = { ...c, stay, maxStay: stay, drinks: 0, drinking: 0, drinkMax: 1, glass: null, leaving: 0, cheer: 0, undercoverHit: false };
+    G.customers++; addSales(C.setCharge, PAIR_X[i] + CUST_DX, 400, '#9be7ff'); Sound.coin();
+    // 誰も来ていない時は、キャストが自動で客の隣に座る
+    const cast = G.casts[i];
+    if (!G.visit && cast.state === 'counter') moveCast(cast, 'box');
+    else if (G.visit) msg('⚠ 来客中…キャストは待機（タップで隣へ）', '#ffcc66');
+  }
+
+  function addSales(amount, x, y, color) {
+    G.sales += amount;
+    popup('+' + yen(amount), x, y, color || '#7CFFB2');
+    for (let k = 0; k < 5; k++) G.particles.push({ x, y, vx: (vrand() - 0.5) * 110, vy: -50 - vrand() * 70, life: 0.7, c: '#ffd54f' });
+  }
+
+  // ---------- casts
+  const homePos = (i) => ({ x: CAST_HOME[i], y: COUNTER_TOP + 8 });
+  const boxPos = (i) => ({ x: PAIR_X[i] + CAST_DX, y: SEAT_Y + 34 });
+  function castPos(cast) {
+    if (cast.state === 'counter') return homePos(cast.i);
+    if (cast.state === 'box') return boxPos(cast.i);
+    const to = cast.target === 'box' ? boxPos(cast.i) : homePos(cast.i);
+    const e = easeInOut(clamp(cast.t, 0, 1));
+    return { x: lerp(cast.from.x, to.x, e), y: lerp(cast.from.y, to.y, e) - Math.sin(e * Math.PI) * 26 };
+  }
+  function easeInOut(t) { return t < 0.5 ? 2 * t * t : 1 - Math.pow(-2 * t + 2, 2) / 2; }
+  function moveCast(cast, where) {
+    cast.from = castPos(cast);
+    cast.state = where === 'box' ? 'toBox' : 'toCounter';
+    cast.target = where; cast.t = 0;
+    cast.dur = where === 'box' ? C.castToBoxSeconds : C.castToCounterSeconds;
+    Sound.whoosh();
+  }
+  function tapCast(cast) {
+    if (state !== STATE.playing || G.paused) return;
+    if (cast.state === 'box' || cast.state === 'toBox') {
+      moveCast(cast, 'counter');
+      popup('カウンターの中へ！', PAIR_X[cast.i] + CAST_DX, 380, '#9be7ff', 0.8);
+    } else if (cast.state === 'counter') {
+      if (G.seats[cast.i]) moveCast(cast, 'box');
+      else { Sound.tick(); popup('お客さんがいない', CAST_HOME[cast.i], 250, '#ccc', 0.8); }
     }
   }
 
-  // 「営業確認」：許可内容・営業内容・記録を確認し、不整合を是正する（入口を一時的に閉める）
-  function check() {
-    if (state !== STATE.playing || G.paused || G.checking > 0) return;
-    const n = G.issues.length;
-    const cost = Math.max(1, n) * C.checkCostPerIssue;
-    G.funds -= cost;
-    G.checking = C.checkSeconds;
-    G.checkingCount = n;
-    msg('🔍 営業確認中… 許可内容・営業内容・記録をチェック', '#ffcc66');
-    Sound.tick();
+  // ---------- drinks（キャストが隣にいる時だけ注文してくれる）
+  function tapBoxCustomer(i) {
+    if (state !== STATE.playing || G.paused) return;
+    const b = G.seats[i]; if (!b || b.leaving) return;
+    if (b.drinking > 0) { popup('まだ飲んでる…', PAIR_X[i] + CUST_DX, 370, '#ccc', 0.6); Sound.tick(); return; }
+    const cast = G.casts[i];
+    if (cast.state !== 'box') { popup('キャストがいないと…', PAIR_X[i] + CUST_DX, 380, '#ccc', 0.8); Sound.tick(); return; }
+    const d = C.drinks[Math.min(b.drinks, C.drinks.length - 1)];
+    const price = d[2] * (b.kind === 'vip' ? C.vipDrinkMultiplier : 1);
+    b.drinks++; G.stats.drinks++;
+    b.glass = d[0]; b.drinkMax = b.drinking = C.drinkSeconds * (b.kind === 'vip' ? 0.7 : 1);
+    b.stay = Math.max(b.stay, b.drinking + 0.6); // 飲み終わるまでは帰らない
+    G.heat = Math.min(100, G.heat + C.heatPerDrink);
+    addSales(price, PAIR_X[i], 395, price >= 20000 ? '#ffd54f' : '#7CFFB2');
+    popup(`${d[0]} ${d[1]}！`, PAIR_X[i], 365, '#fff', 0.9);
+    b.cheer = 0.4;
+    if (b.drinks >= C.drinks.length) {
+      G.stats.towers++; Sound.tower(); G.shake = 0.15;
+      b.leaving = b.drinking + 0.5;
+      popup('ごちそうさま〜♪', PAIR_X[i], 340, '#ff9ccc', 1.2);
+    } else { Sound.pour(); Sound.coin(b.drinks); }
   }
-  function finishCheck() {
-    // 確認中に発生した分も含めて是正
-    const fixed = G.issues.length;
-    G.issues = [];
-    if (fixed > 0) { popup(`✓ 不整合 ${fixed}件を是正`, 180, 300, '#7CFFB2', 1.6); Sound.fanfare(); msg('✓ 是正完了。適法な営業状態です', '#7CFFB2'); }
-    else { popup('✓ 問題なし', 180, 300, '#7CFFB2', 1.4); msg('✓ 許可内容と営業内容は一致しています', '#7CFFB2'); }
+
+  // ---------- visitors / police
+  function startVisit(kind, reason) {
+    let warn = reason === 'raid' ? C.raidWarningSeconds : lerp(C.warningSecondsSafe, C.warningSecondsHot, G.heat / 100);
+    if (G.sleepyT > 0) warn *= C.sleepyLookoutFactor;
+    const who = kind === 'police' ? { icon: '👮', name: '警察' } : pick(FALSE_VISITORS);
+    G.visit = { kind, reason, who, phase: 'knock', t: warn, max: warn };
+    Sound.knock();
+    $('alarm').classList.remove('hidden');
+    $('alarm').classList.toggle('raid', reason === 'raid');
+    $('alarm-text').textContent = reason === 'raid' ? '🚨 ドンドンドン！！ 警察だ、開けなさい！' : '🚪 コンコン！ 誰か来た… 窓を見て！';
+  }
+  function updateVisit(dt) {
+    const v = G.visit;
+    v.t -= dt;
+    if (v.phase === 'knock') {
+      $('alarm-fill').style.width = clamp(v.t / v.max, 0, 1) * 100 + '%';
+      if (v.t > 0) return;
+      v.phase = 'inside'; $('alarm').classList.add('hidden');
+      v.t = v.kind === 'police' ? C.policeInsideSeconds : C.visitorInsideSeconds;
+      if (v.kind === 'police') {
+        Sound.siren();
+        toast(v.reason === 'inspection' ? '👮 警察です。立入調査を行います' : v.reason === 'raid' ? '👮 警察だ！ そのまま動くな！' : '👮 警察です。ちょっと中を見せてください', 'blue');
+      } else {
+        toast(`${v.who.icon} ${v.who.line}`, 'pink');
+        G.stats.falseAlarms++;
+      }
+    }
+    if (v.phase === 'inside') {
+      if (v.kind === 'police') {
+        const caught = G.casts.find(castExposed);
+        if (caught) { bust(caught); return; }
+      }
+      if (v.t > 0) return;
+      if (v.kind === 'police') {
+        G.stats.passed++;
+        G.heat = clamp(G.heat + C.heatAfterPassedVisit, 0, 100);
+        toast('👮「…ただのバーですね。失礼しました」 セーフ！', 'green');
+        Sound.relief();
+        if (G.seats.some((b, i) => b && G.casts[i].state === 'counter')) msg('💃 キャストをタップしてまた隣へ！', '#ff9ccc');
+      } else {
+        msg(`なんだ、${v.who.name}か…`, '#ccc');
+      }
+      G.visit = null;
+      G.visitT = rand(...C.visitIntervalSeconds);
+    }
+  }
+
+  // 警察が客の隣にいるキャストを見つけ、聞き込みをした時点でアウト
+  function bust(cast) {
+    G.outcome = 'bust'; state = STATE.ending; G.bustT = 0;
+    G.caught = { i: cast.i, name: cast.name, pos: castPos(cast) };
+    $('alarm').classList.add('hidden');
+    toast(`👮「…ん？ そこのお姉さん、ちょっといいですか？」`, 'blue');
+    Sound.warn();
+    setTimeout(() => { if (!G) return; Sound.siren(); G.shake = 0.6; G.flash = 1; toast(`🚨 ${cast.name}への聞き込みで発覚！ 無許可の接待営業で摘発！`, 'red'); }, 1500);
+    setTimeout(finish, 3300);
   }
 
   // ---------- events
   function runEvent(type) {
     switch (type) {
-      case 'buzz':
-        G.buzzLeft = C.buzzExtraCustomers; G.spawnT = 0.2;
-        toast('📱 SNSでバズった！ 来客が急増中', 'pink'); Sound.notify(); break;
+      case 'buzz': G.buzzLeft = C.buzzExtraCustomers; G.spawnT = 0.2; toast('📱 SNSでバズった！ 客が押し寄せる！', 'pink'); Sound.notify(); break;
       case 'vip':
         if (G.vipCount >= C.maxVipEvents) return;
-        G.vipCount++; spawnCustomer('vip');
-        toast('💎 VIP来店！ 逃さず接客しよう', 'gold'); Sound.fanfare(); break;
-      case 'failure':
-        G.funds -= C.repairCost; G.shake = 0.3;
-        toast(`🔧 製氷機が故障！ 修理費 -${yen(C.repairCost)}`, 'orange'); Sound.bad(); break;
-      case 'complaint':
-        addIssue('騒音苦情への対応未了');
-        toast('📢 近隣から苦情！ 営業確認で対応しよう', 'orange'); Sound.notify();
-        G.checkHint = 3; break;
-      case 'licenseCheck':
-        if (G.issues.length) {
-          const d = 5 * G.issues.length; G.compliance -= d;
-          toast(`📄 許可内容の確認：ズレあり（-${d}） 営業確認を！`, 'orange'); Sound.warn(); G.checkHint = 3;
-        } else {
-          G.compliance = Math.min(100, G.compliance + 3);
-          toast('📄 許可内容の確認：営業実態と一致（+3）', 'green'); Sound.fanfare();
-        }
-        break;
+        G.vipCount++; spawnCustomer('vip'); toast('💎 VIP来店！ ボックスでお酒を勧めまくれ！', 'gold'); Sound.fanfare(); break;
+      case 'undercover': spawnCustomer('undercover'); toast('🕶 なんだか目つきの鋭い客が来た…', 'orange'); Sound.notify(); break;
+      case 'tipoff':
+        G.heat = Math.min(100, G.heat + C.heatTipOff);
+        toast(`📢 元従業員がタレコミ！ 疑惑 +${C.heatTipOff}`, 'orange'); Sound.warn(); break;
+      case 'sleepy': G.sleepyT = C.sleepyLookoutSeconds; toast('😪 見張りが居眠り中… ノックに気づくのが遅れる！', 'orange'); Sound.notify(); break;
     }
-  }
-
-  // ---------- investigation（03:00前後に必ず1回。ゲーム時間は停止）
-  function startInvestigation() {
-    state = STATE.investigation;
-    G.investigated = true;
-    G.police = 0.001;
-    G.checking = 0;
-    G.queue.forEach((c) => sendAway(c)); G.queue = [];
-    Sound.siren();
-    const inv = $('inv');
-    $('inv-title').textContent = '🚨 警察による立入調査です';
-    $('inv-sub').textContent = '営業許可と営業実態の整合性を確認します';
-    $('inv-list').innerHTML = INV_ITEMS.map((it) => `<li data-k="${it.key}"><span>${it.label}</span><b>…</b></li>`).join('');
-    $('inv-result').textContent = '';
-    $('inv-result').className = 'inv-result';
-    const btn = $('inv-btn'); btn.textContent = '確認する'; btn.disabled = false;
-    btn.onclick = revealInvestigation;
-    inv.classList.remove('hidden');
-  }
-
-  function revealInvestigation() {
-    const btn = $('inv-btn'); btn.disabled = true; Sound.init();
-    const lis = [...$('inv-list').children];
-    let i = 0;
-    const step = () => {
-      if (i >= lis.length) return finishInvestigation();
-      const li = lis[i]; const k = li.dataset.k;
-      const bad = G.issues.filter((x) => x.item === k);
-      li.classList.add(bad.length ? 'ng' : 'ok');
-      li.querySelector('b').textContent = bad.length ? '✗ ' + bad.map((x) => x.name).join('・') : '✓ 整合';
-      bad.length ? Sound.bad() : Sound.tick();
-      i++; setTimeout(step, 380);
-    };
-    step();
-  }
-
-  function finishInvestigation() {
-    const n = G.issues.length;
-    const res = $('inv-result'), btn = $('inv-btn');
-    btn.disabled = false;
-    if (n === 0) {
-      G.compliance = Math.min(100, G.compliance + C.investigationOkBonus);
-      res.textContent = `調査完了：許可内容と営業実態の整合を確認しました（コンプライアンス +${C.investigationOkBonus}）`;
-      res.className = 'inv-result ok'; Sound.clear();
-      btn.textContent = '営業再開'; btn.onclick = resumeFromInvestigation;
-    } else if (n >= C.seriousIssueCount) {
-      res.textContent = `重大な不整合（${n}件）を確認。是正不能と判断され、営業停止となりました。`;
-      res.className = 'inv-result ng'; Sound.warn();
-      G.suspended = true;
-      btn.textContent = '結果へ'; btn.onclick = () => { hideInv(); endGame('suspended'); };
-    } else {
-      // CORRECTION（是正対応）
-      state = STATE.correction;
-      const cost = n * C.correctionCostPerIssue, pen = n * C.correctionPenaltyPerIssue;
-      $('inv-title').textContent = '🛠 是正対応';
-      $('inv-sub').textContent = '該当サービスを停止し、記録・書類を整備します';
-      res.innerHTML = `不整合 ${n}件<br>是正費用 <b>${yen(cost)}</b> ／ コンプライアンス <b>-${pen}</b>`;
-      res.className = 'inv-result warn'; Sound.notify();
-      btn.textContent = '是正する';
-      btn.onclick = () => {
-        if (G.funds < cost) {
-          res.textContent = '是正費用が不足しています。是正不能のため営業停止となりました。';
-          res.className = 'inv-result ng'; Sound.warn(); G.suspended = true;
-          btn.textContent = '結果へ'; btn.onclick = () => { hideInv(); endGame('suspended'); };
-          return;
-        }
-        G.funds -= cost; G.compliance -= pen; G.issues = [];
-        if (G.compliance <= C.minimumCompliance) {
-          G.compliance = 0;
-          res.textContent = 'コンプライアンスが0になりました。営業停止となりました。';
-          res.className = 'inv-result ng'; Sound.warn(); G.suspended = true;
-          btn.textContent = '結果へ'; btn.onclick = () => { hideInv(); endGame('suspended'); };
-          return;
-        }
-        res.textContent = '是正完了。適法な営業を再開します。';
-        res.className = 'inv-result ok'; Sound.fanfare();
-        btn.textContent = '営業再開'; btn.onclick = resumeFromInvestigation;
-      };
-    }
-  }
-  function hideInv() { $('inv').classList.add('hidden'); }
-  function resumeFromInvestigation() {
-    hideInv(); state = STATE.playing; G.police = -1; // パトカー退場
-    G.spawnT = 0.6;
-    msg('🚓 調査終了。営業再開！', '#9be7ff');
   }
 
   // ---------- update
   function update(dt) {
     if (!G) return;
     animate(dt);
+    if (state === STATE.ending) { G.bustT += dt; return; }
     if (state !== STATE.playing || G.paused) return;
 
     G.elapsed += dt;
     G.min = Math.min(TOTAL_MIN, (G.elapsed / C.gameDurationSeconds) * TOTAL_MIN);
-
-    // 1時間ごとの固定費
-    const h = Math.floor(G.min / 60);
-    if (h > G.lastHour) {
-      G.lastHour = h;
-      if (h < C.gameHours) { G.funds -= C.hourlyCost; popup(`家賃・人件費 -${yen(C.hourlyCost)}`, 180, 250, '#ff9a9a', 1.4); }
+    if (G.min >= TOTAL_MIN) {
+      G.outcome = 'clear'; state = STATE.ending; $('alarm').classList.add('hidden');
+      Sound.clear(); toast('🌅 朝5時！ 今夜も逃げ切った！', 'gold');
+      setTimeout(finish, 1500); return;
     }
 
-    if (G.min >= TOTAL_MIN) { G.completed = true; endGame('clear'); return; }
-    if (!G.investigated && G.min >= G.invAt) { startInvestigation(); return; }
-
-    // ランダムイベント
     for (const e of G.events) if (!e.done && G.min >= e.at) { e.done = true; runEvent(e.type); }
 
     // 来客
     G.spawnT -= dt;
     if (G.spawnT <= 0) {
-      if (G.buzzLeft > 0) { G.buzzLeft--; G.spawnT = rand(0.35, 0.6); }
-      else G.spawnT = rand(C.minCustomerInterval, C.maxCustomerInterval);
+      if (G.buzzLeft > 0) { G.buzzLeft--; G.spawnT = rand(0.4, 0.7); } else G.spawnT = rand(C.minCustomerInterval, C.maxCustomerInterval);
       spawnCustomer();
     }
-
-    // 待ち時間（全員）
     for (let i = G.queue.length - 1; i >= 0; i--) {
-      const c = G.queue[i];
-      if (Math.abs(c.x - c.tx) < 40) c.stay -= dt;
-      if (c.stay <= 0) {
-        G.queue.splice(i, 1); sendAway(c); G.lost++;
-        popup('💢 帰っちゃった', c.x, 420, '#ff8a8a', 1);
-      }
+      const c = G.queue[i]; c.wait -= dt;
+      if (c.wait <= 0) { G.queue.splice(i, 1); leaveToDoor(c); popup('💢 帰っちゃった', c.x - 20, 300, '#ff8a8a', 1); }
     }
-
-    if (G.serveCD > 0) G.serveCD -= dt;
-    if (G.checking > 0) { G.checking -= dt; if (G.checking <= 0) finishCheck(); }
-    if (G.checkHint > 0) G.checkHint -= dt;
-
-    // 未是正の不整合でコンプライアンス低下
-    if (G.issues.length) {
-      G.compliance -= G.issues.length * C.issueDrainPerSecond * dt;
-      if (G.compliance <= C.minimumCompliance) {
-        G.compliance = 0; G.suspended = true;
-        toast('⛔ コンプライアンス0：営業停止', 'red'); Sound.warn();
-        endGame('suspended'); return;
+    // 着席客
+    G.seats.forEach((b, i) => {
+      if (!b) return;
+      if (b.cheer > 0) b.cheer -= dt;
+      if (b.drinking > 0) b.drinking -= dt;
+      const cast = G.casts[i];
+      if (cast.state === 'box' && b.kind === 'undercover' && !b.undercoverHit) {
+        b.undercoverHit = true; G.heat = Math.min(100, G.heat + C.heatUndercover);
+        toast(`🕶 内偵捜査だった！ 疑惑 +${C.heatUndercover}`, 'red'); Sound.warn(); G.shake = 0.3;
       }
+      if (b.leaving > 0) { b.leaving -= dt; if (b.leaving <= 0) b.stay = 0; }
+      if ((b.stay -= dt) <= 0) {
+        G.seats[i] = null; leaveToDoor({ look: b.look, x: PAIR_X[i] + CUST_DX, y: 492 });
+        if (cast.state === 'box' || cast.state === 'toBox') moveCast(cast, 'counter');
+      }
+    });
+    // キャスト移動
+    G.casts.forEach((c) => {
+      if (c.state !== 'toBox' && c.state !== 'toCounter') return;
+      c.t += dt / c.dur;
+      if (c.t >= 1) c.state = c.target === 'box' && G.seats[c.i] ? 'box' : 'counter';
+    });
+
+    // 疑惑ゲージ
+    const st = settaiCount();
+    if (st > 0) G.heat = Math.min(100, G.heat + st * C.heatPerSettaiSecond * dt);
+    else G.heat = Math.max(0, G.heat - C.heatDecayNoSettai * dt);
+    if (G.sleepyT > 0) G.sleepyT -= dt;
+
+    // 来訪者
+    if (G.visit) updateVisit(dt);
+    else if (!G.inspected && G.min >= G.inspAt) { G.inspected = true; startVisit('police', 'inspection'); }
+    else if (G.heat >= 100) startVisit('police', 'raid');
+    else {
+      G.visitT -= dt;
+      if (G.visitT <= 0) startVisit(rng() < lerp(C.policeChanceBase, C.policeChanceAtMaxHeat, G.heat / 100) ? 'police' : 'other', 'patrol');
     }
-    if (G.funds < 0) { toast('💸 資金ショート：経営破綻', 'red'); Sound.warn(); endGame('bankrupt'); return; }
   }
 
   function animate(dt) {
-    const all = G.queue.concat(G.leaving);
-    G.queue.forEach((c, i) => { c.tx = QX[i]; });
-    for (const c of all) {
-      const dx = c.tx - c.x, step = 210 * dt;
-      c.walking = Math.abs(dx) > 1;
-      c.x = Math.abs(dx) <= step ? c.tx : c.x + Math.sign(dx) * step;
+    G.queue.forEach((c, i) => {
+      const q = QUEUE[i]; const dx = q.x - c.x, step = 220 * dt;
+      c.walking = Math.abs(dx) > 1; c.x = Math.abs(dx) <= step ? q.x : c.x + Math.sign(dx) * step; c.y = q.y;
       if (c.walking) c.phase += dt * 12;
-      if (c.state === 'enter' && Math.abs(c.x - c.tx) < 3) { c.alpha -= dt * 3.5; c.y -= dt * 25; }
-      if (c.state === 'leave') c.alpha -= dt * 0.9;
-    }
-    G.leaving = G.leaving.filter((c) => c.alpha > 0 && c.x > -50 && c.x < 430);
-    const f = G.queue[0]; if (f) f.arrived = Math.abs(f.x - f.tx) < 4;
+    });
+    G.walkers.forEach((w) => {
+      const dx = w.tx - w.x, dy = w.ty - w.y, d = Math.hypot(dx, dy), step = 200 * dt;
+      if (d > step) { w.x += (dx / d) * step; w.y += (dy / d) * step; w.phase += dt * 12; } else w.alpha -= dt * 3;
+    });
+    G.walkers = G.walkers.filter((w) => w.alpha > 0);
     G.popups.forEach((p) => { p.y -= 34 * dt; p.life -= dt; });
     G.popups = G.popups.filter((p) => p.life > 0);
     G.particles.forEach((p) => { p.x += p.vx * dt; p.y += p.vy * dt; p.vy += 260 * dt; p.life -= dt; });
     G.particles = G.particles.filter((p) => p.life > 0);
     if (G.shake > 0) G.shake -= dt;
-    if (G.police > 0 && G.police < 1) G.police = Math.min(1, G.police + dt * 1.5);
-    if (G.police < 0) { G.police -= dt * 1.2; if (G.police < -1.99) G.police = 0; }
+    if (G.flash > 0) G.flash -= dt * 0.8;
   }
 
   // ---------- end
-  function endGame(outcome) {
-    if (state === STATE.gameOver || state === STATE.result) return;
-    G.outcome = outcome;
-    state = outcome === 'clear' ? STATE.result : STATE.gameOver;
-    if (outcome === 'clear') { Sound.clear(); G.queue.forEach((c) => sendAway(c)); G.queue = []; }
-    const r = computeScore();
-    G.score = r;
-    Storage.data.plays++;
-    Storage.data.totalSales += G.sales;
-    Storage.data.totalPoints += r.total;
-    G.newBest = r.total > Storage.data.bestScore;
-    if (G.newBest) Storage.data.bestScore = r.total;
-    Storage.data.lastType = G.type;
-    Storage.save();
-    setTimeout(() => { state = STATE.result; showResult(); }, outcome === 'clear' ? 1400 : 900);
-  }
-
   function computeScore() {
-    const salesScore = Math.min(40, G.sales / C.salesPerPoint);
+    const salesScore = Math.min(50, G.sales / C.salesPerPoint);
     const customerScore = Math.min(20, G.customers / C.customersPerPoint);
-    const operationScore = G.completed && !G.suspended ? C.operationScore : 0;
-    const complianceScore = clamp(G.compliance, 0, 100) * C.complianceWeight;
-    const total = Math.round(salesScore + customerScore + operationScore + complianceScore);
-    const rank = C.ranks.find(([, min]) => total >= min)[0];
-    return { salesScore, customerScore, operationScore, complianceScore, total, rank };
+    const survival = G.outcome === 'clear' ? C.survivalScore : 0;
+    const total = Math.round(salesScore + customerScore + survival);
+    const rank = C.ranks.find(([, m]) => total >= m)[0];
+    return { salesScore, customerScore, survival, total, rank };
+  }
+  function finish() {
+    if (state === STATE.result || !G) return;
+    state = STATE.result;
+    G.score = computeScore();
+    const d = Storage.data;
+    d.plays++; d.totalSales += G.sales; d.totalPoints += G.score.total;
+    G.newBest = G.score.total > d.bestScore; if (G.newBest) d.bestScore = G.score.total;
+    Storage.save();
+    showResult();
   }
 
   // ---------------------------------------------------------------- UI
   const screens = { title: $('screen-title'), game: $('screen-game'), result: $('screen-result') };
   function showScreen(name) { Object.entries(screens).forEach(([k, el]) => el.classList.toggle('active', k === name)); }
-
   function toast(text, color = 'pink') {
-    const el = document.createElement('div');
-    el.className = 'toast ' + color; el.textContent = text;
+    const el = document.createElement('div'); el.className = 'toast ' + color; el.textContent = text;
     const area = $('toast-area'); area.appendChild(el);
     while (area.children.length > 2) area.removeChild(area.firstChild);
-    setTimeout(() => el.classList.add('out'), 2300);
-    setTimeout(() => el.remove(), 2700);
+    setTimeout(() => el.classList.add('out'), 2300); setTimeout(() => el.remove(), 2700);
   }
   let msgTimer = 0;
   function msg(text, color) {
     const el = $('msg-line'); el.textContent = text; el.style.color = color || '#fff';
-    el.classList.add('show'); clearTimeout(msgTimer);
-    msgTimer = setTimeout(() => el.classList.remove('show'), 1800);
+    el.classList.add('show'); clearTimeout(msgTimer); msgTimer = setTimeout(() => el.classList.remove('show'), 1800);
   }
   function popup(text, x, y, color, life = 1.1) { G.popups.push({ text, x, y, color, life, max: life }); }
 
-  const hudCache = {};
-  function setText(id, v) { if (hudCache[id] !== v) { hudCache[id] = v; $(id).textContent = v; } }
+  const cache = {};
+  function setText(id, v) { if (cache[id] !== v) { cache[id] = v; $(id).textContent = v; } }
   function fmtTime(min) {
-    const t = Math.floor(min);
-    const hh = (C.openingHour + Math.floor(t / 60)) % 24, mm = t % 60;
+    const t = Math.floor(min), hh = (C.openingHour + Math.floor(t / 60)) % 24, mm = t % 60;
     return String(hh).padStart(2, '0') + ':' + String(mm).padStart(2, '0');
   }
   function updateHUD() {
@@ -581,137 +473,122 @@
     setText('hud-remain', '残り ' + Math.max(0, Math.ceil(C.gameDurationSeconds - G.elapsed)) + '秒');
     setText('hud-sales', yen(G.sales));
     setText('hud-cust', G.customers + '人');
-    setText('hud-funds', yen(G.funds));
-    const n = G.issues.length;
-    const st = n === 0 ? ['適法', 'ok'] : n < C.seriousIssueCount ? [`要確認 ${n}`, 'warn'] : [`違反の恐れ ${n}`, 'bad'];
-    setText('hud-status', st[0]); $('hud-status').className = 'status ' + st[1];
-    const gp = G.investigated ? 100 : clamp(G.min / G.invAt, 0, 1) * 100;
-    $('gauge-fill').style.width = gp + '%';
-    $('gauge-fill').className = G.investigated ? 'done' : gp > 85 ? 'hot' : gp > 60 ? 'warm' : '';
-    const cv = clamp(G.compliance, 0, 100);
-    $('comp-fill').style.width = cv + '%';
-    $('comp-fill').className = cv < 30 ? 'low' : cv < 60 ? 'mid' : '';
-    setText('comp-val', String(Math.round(cv)));
-    $('btn-check').classList.toggle('busy', G.checking > 0);
-    $('btn-check').classList.toggle('hint', G.checking <= 0 && (n > 0 && (G.checkHint > 0 || n >= 2 || (!G.investigated && G.min > G.invAt - 50))));
-    $('btn-serve').classList.toggle('ready', !!(G.queue[0] && G.queue[0].arrived && G.checking <= 0));
-    $('btn-quit').disabled = state !== STATE.playing;
+    $('heat-fill').style.width = G.heat + '%';
+    $('heat-fill').className = G.heat > 80 ? 'hot' : G.heat > 50 ? 'warm' : '';
+    const st = G.casts.filter(castExposed).length;
+    setText('hud-mode', st ? `接待中 ${st}` : 'ただのバー');
+    $('hud-mode').className = 'mode ' + (st ? 'settai' : 'bar');
+    const front = G.queue[0] && Math.abs(G.queue[0].x - QUEUE[0].x) < 6;
+    $('btn-seat').classList.toggle('ready', !!front && G.seats.includes(null));
   }
 
-  function fmtDuration(min) { const t = Math.floor(min); return `${Math.floor(t / 60)}時間${String(t % 60).padStart(2, '0')}分`; }
   function showResult() {
-    const r = G.score;
-    const head = { clear: '🌅 朝まで営業成功！', suspended: '⛔ 営業停止…', bankrupt: '💸 資金ショート…経営破綻', closed: '🏮 本日は自主閉店' }[G.outcome];
-    $('res-headline').textContent = head;
-    $('res-headline').className = 'res-headline ' + G.outcome;
-    $('res-type').textContent = `${G.B.store}（${G.B.name}）`;
+    const r = G.score, bust = G.outcome === 'bust';
+    $('res-headline').textContent = bust ? '🚨 摘発…' : '🌅 今夜も逃げ切った！';
+    $('res-headline').className = 'res-headline ' + (bust ? 'bust' : 'clear');
+    const news = $('res-news');
+    news.classList.toggle('hidden', !bust);
+    if (bust) news.innerHTML = `<small>ネオン横丁新聞（架空）</small><b>「${STORE}」を摘発<br>バーと偽り 無許可で接待営業の疑い</b><span>${fmtTime(G.min)}ごろ、警察が店内に立ち入ったところ、女性従業員が客の隣に座って接客していたという。</span>`;
     $('res-sales').textContent = yen(G.sales);
     $('res-cust').textContent = G.customers + '人';
-    $('res-rank').textContent = r.rank + 'ランク';
-    $('res-rank').className = 'rank-' + r.rank;
-    $('res-comp').textContent = Math.round(clamp(G.compliance, 0, 100)) + '点';
+    $('res-rank').textContent = r.rank + 'ランク'; $('res-rank').className = 'rank-' + r.rank;
+    $('res-pass').textContent = G.stats.passed + '回';
     $('res-time').textContent = fmtTime(G.min) + 'まで';
     $('res-score').textContent = r.total;
     $('res-best').textContent = G.newBest ? '🏆 NEW BEST SCORE!' : `BEST ${Storage.data.bestScore}`;
-    $('res-breakdown').textContent =
-      `売上 ${r.salesScore.toFixed(1)}/40 ・ 来客 ${r.customerScore.toFixed(1)}/20 ・ 営業達成 ${r.operationScore}/20 ・ 法令遵守 ${r.complianceScore.toFixed(1)}/20` +
-      `\n営業時間 ${fmtDuration(G.min)} ・ 営業停止 ${G.suspended ? 'あり' : 'なし'}`;
-    $('res-tip').innerHTML = '<b>💡 豆知識</b> ' + pickTip() + '<small>※ゲーム用に簡略化した一般的な説明です</small>';
+    $('res-breakdown').textContent = `売上 ${r.salesScore.toFixed(1)}/50 ・ 来客 ${r.customerScore.toFixed(1)}/20 ・ 生存 ${r.survival}/30\nお酒 ${G.stats.drinks}杯（タワー ${G.stats.towers}回） ・ 空振りノック ${G.stats.falseAlarms}回`;
+    $('res-tip').innerHTML = '<b>💡 現実では</b> 客の隣に座って談笑・お酌をするなどの「接待」をする営業には、風俗営業の許可が必要とされています。許可なく接待営業を行うことは法律で禁止されています。<small>※本作はフィクションです。説明は一般的な内容を簡略化したものです。</small>';
     const dbl = $('btn-double');
-    dbl.classList.toggle('hidden', !Ads.available());
-    dbl.disabled = false; dbl.textContent = '▶ 広告を見て獲得ポイント2倍（任意）';
+    dbl.classList.toggle('hidden', !Ads.available()); dbl.disabled = false; dbl.textContent = '▶ 広告を見て獲得ポイント2倍（任意）';
     G.doubled = false;
     showScreen('result');
   }
-  function pickTip() {
-    const keys = Object.keys(G.refusedKinds);
-    if (G.outcome === 'suspended') return TIPS.records;
-    if (keys.length) return TIPS[pick(keys)];
-    return TIPS[pick(['late', 'records', 'settai', 'minor'])];
-  }
 
   function startGame() {
-    Sound.init();
-    newGame();
-    state = STATE.playing;
-    Object.keys(hudCache).forEach((k) => delete hudCache[k]);
-    $('hud-license').textContent = G.B.license;
-    $('toast-area').innerHTML = '';
-    hideInv();
-    showScreen('game');
-    updateHUD();
-    toast(`🏮 ${G.B.store} 開店！ 22:00〜翌5:00`, 'pink');
+    Sound.init(); newGame(); state = STATE.playing;
+    Object.keys(cache).forEach((k) => delete cache[k]);
+    $('toast-area').innerHTML = ''; $('alarm').classList.add('hidden');
+    showScreen('game'); updateHUD();
+    toast(`🏮 ${STORE} 開店！ 表向きは、ただのバー`, 'pink');
   }
-
-  function goTitle() {
-    state = STATE.title; G = null; hideInv();
-    renderTitle(); showScreen('title');
-  }
-
+  function goTitle() { state = STATE.title; G = null; $('alarm').classList.add('hidden'); renderTitle(); showScreen('title'); }
   async function afterResult(next) {
-    Storage.data._sinceAd = (Storage.data._sinceAd || 0) + 1;
-    if (Storage.data._sinceAd >= C.ads.interstitialEveryNPlays) {
-      Storage.data._sinceAd = 0; Storage.save();
+    Storage.data.sinceAd++;
+    if (Storage.data.sinceAd >= C.ads.interstitialEveryNPlays) {
+      Storage.data.sinceAd = 0; Storage.save();
       try { await Ads.showInterstitial(); } catch (e) { /* 広告失敗でも継続 */ }
     }
     next();
   }
-
   function renderTitle() {
-    $('title-best').textContent = Storage.data.bestScore;
-    $('title-stats').textContent = Storage.data.plays
-      ? `プレイ ${Storage.data.plays}回 ・ 累計売上 ${yen(Storage.data.totalSales)} ・ 累計pt ${Storage.data.totalPoints}` : '';
-    const sel = $('type-select');
-    sel.innerHTML = Object.entries(BUSINESS).map(([k, b]) => `
-      <button class="type-card ${k === businessType ? 'sel' : ''}" data-type="${k}">
-        <b>${b.name}</b><span class="store">${b.store}</span><small>${b.desc}</small>
-      </button>`).join('');
-    sel.querySelectorAll('.type-card').forEach((el) => el.addEventListener('click', () => {
-      businessType = el.dataset.type; Storage.data.lastType = businessType; Storage.save();
-      Sound.init(); Sound.tick(); renderTitle();
-    }));
-    $('btn-sound').textContent = Storage.data.sound ? '🔊 サウンド ON' : '🔇 サウンド OFF';
+    const d = Storage.data;
+    $('title-best').textContent = d.bestScore;
+    $('title-stats').textContent = d.plays ? `プレイ ${d.plays}回 ・ 累計売上 ${yen(d.totalSales)} ・ 累計 ${d.totalPoints}pt` : '';
+    $('btn-sound').textContent = d.sound ? '🔊 サウンド ON' : '🔇 サウンド OFF';
     $('ad-banner').classList.toggle('hidden', !Ads.available());
   }
-
   function modal(html, buttons) {
     const box = $('modal-box');
     box.innerHTML = html + '<div class="modal-btns">' + buttons.map((b, i) => `<button class="btn ${b.cls || 'btn-primary'}" data-i="${i}">${b.label}</button>`).join('') + '</div>';
     $('modal').classList.remove('hidden');
     box.querySelectorAll('[data-i]').forEach((el) => el.addEventListener('click', () => {
-      $('modal').classList.add('hidden'); Sound.tick(); buttons[+el.dataset.i].onClick && buttons[+el.dataset.i].onClick();
+      $('modal').classList.add('hidden'); Sound.tick(); const f = buttons[+el.dataset.i].onClick; if (f) f();
     }));
   }
   const HOWTO = `
     <h2>遊び方</h2>
-    <p>架空の繁華街「ネオン横丁」でお店を経営。<b>22:00〜翌5:00（約45秒）</b>を、許可の範囲内で営業し切ろう。</p>
+    <p>あなたは「${STORE}」のオーナー。表向きはただのバーだけど、実は<b>女性キャストがお客さんの隣で接客</b>している（もちろん無許可）。<b>22:00〜翌5:00（45秒）</b>、摘発されずに稼ぎ切れ！</p>
     <ul class="howto">
-      <li><b>🍸 接客する</b>：先頭のお客さんを接客して売上GET。許可外の要望（接待・深夜の遊興・未成年への酒類提供など）は自動でお断りします。</li>
-      <li><b>🔍 営業確認</b>：忙しいと「記録漏れ」などの不整合が溜まり、コンプライアンスが減っていきます。営業確認で是正！ ただし確認中は入口を閉めます。</li>
-      <li><b>🚨 立入調査</b>：3時前後に必ず発生。それまでの経営判断で結果が決まります。不整合が多いと営業停止！</li>
-      <li><b>💸 資金</b>：毎時の家賃・人件費や修理費を払えなくなると経営破綻。</li>
+      <li><b>🚪 案内する</b>：お客さんをカウンター席へ。キャストが隣に座って接客する。</li>
+      <li><b>🍾 お客さんをタップ</b>：お酒をどんどん勧める！ ビール→ハイボール→ワイン→シャンパン→タワーと単価UP。ただし疑惑も上がる。</li>
+      <li><b>🚪 ノック</b>：ドアの窓に映る影をチェック。<b>👮警察なら、客の隣のキャストをタップしてカウンターの中へ戻せ！</b> 間に合わなければ摘発。</li>
+      <li>警察が帰ったら、カウンターの中のキャストをタップしてまた隣へ。疑惑が溜まると警察が来やすくなり、MAXで踏み込まれる！ 3時ごろの立入調査は必ず来る。</li>
     </ul>
-    <p class="small">スコア＝売上40＋来客20＋営業達成20＋法令遵守20（100点満点）</p>`;
+    <p class="small">※本作はフィクションです。現実の無許可営業は法律で禁止されています。</p>`;
 
   // ---------------------------------------------------------------- input
-  function bindTap(el, fn) {
-    el.addEventListener('pointerdown', (e) => { e.preventDefault(); Sound.init(); fn(); });
+  function bindTap(el, fn) { el.addEventListener('pointerdown', (e) => { e.preventDefault(); Sound.init(); fn(); }); }
+  bindTap($('btn-seat'), seatGuest);
+
+  const canvas = $('scene'), ctx = canvas.getContext('2d');
+  canvas.addEventListener('pointerdown', (e) => {
+    if (state !== STATE.playing || !G || G.paused) return;
+    e.preventDefault(); Sound.init();
+    const r = canvas.getBoundingClientRect();
+    const x = ((e.clientX - r.left) / r.width) * W;
+    const y = ((e.clientY - r.top) / r.height) * VH - OY;
+    handleTap(x, y);
+  });
+  function handleTap(x, y) {
+    // キャスト優先（指で押しやすいよう判定は大きめ）
+    let best = null, bd = 1e9;
+    G.casts.forEach((c) => {
+      const p = castPos(c);
+      const cy = c.state === 'counter' ? p.y - 62 : c.state === 'box' ? p.y - 58 : p.y - 45;
+      const d = Math.hypot(x - p.x, (y - cy) * 0.75);
+      if (d < 26 && d < bd) { bd = d; best = c; }
+    });
+    if (best) { tapCast(best); return; }
+    for (let i = 0; i < G.seats.length; i++) {
+      if (Math.abs(x - PAIR_X[i]) < 46 && y > SEAT_Y - 90 && y < SEAT_Y + 40) {
+        if (x < PAIR_X[i]) { if (G.seats[i]) tapBoxCustomer(i); } else tapCast(G.casts[i]);
+        return;
+      }
+    }
   }
-  bindTap($('btn-serve'), serve);
-  bindTap($('btn-check'), check);
-  $('btn-quit').addEventListener('click', () => {
-    if (state !== STATE.playing) return;
+
+  $('btn-pause').addEventListener('click', () => {
+    if (state !== STATE.playing || G.paused) return;
     G.paused = true;
-    modal('<h2>営業終了しますか？</h2><p>自主閉店すると「営業達成」の20点は獲得できません。</p>', [
-      { label: '営業を続ける', onClick: () => { G.paused = false; } },
-      { label: '営業終了', cls: 'btn-ghost', onClick: () => { G.paused = false; endGame('closed'); } },
+    modal('<h2>一時停止中</h2>', [
+      { label: '再開', onClick: () => { G.paused = false; } },
+      { label: 'タイトルへ', cls: 'btn-ghost', onClick: () => { goTitle(); } },
     ]);
   });
   $('btn-start').addEventListener('click', () => {
     Sound.init();
-    if (!Storage.data.tutorialDone) {
-      modal(HOWTO, [{ label: '営業開始！', onClick: () => { Storage.data.tutorialDone = true; Storage.save(); startGame(); } }]);
-    } else startGame();
+    if (!Storage.data.tutorialDone) modal(HOWTO, [{ label: '開店！', onClick: () => { Storage.data.tutorialDone = true; Storage.save(); startGame(); } }]);
+    else startGame();
   });
   $('btn-howto').addEventListener('click', () => { Sound.init(); modal(HOWTO, [{ label: 'OK' }]); });
   $('btn-sound').addEventListener('click', () => { Storage.data.sound = !Storage.data.sound; Storage.save(); Sound.init(); Sound.tick(); renderTitle(); });
@@ -720,51 +597,41 @@
   $('btn-double').addEventListener('click', async () => {
     if (!G || G.doubled) return;
     const btn = $('btn-double'); btn.disabled = true;
-    let ok = false;
-    try { ok = await Ads.showRewarded(); } catch (e) { ok = false; }
+    let ok = false; try { ok = await Ads.showRewarded(); } catch (e) { ok = false; }
     if (ok) {
-      G.doubled = true;
-      Storage.data.totalPoints += G.score.total; Storage.save();
-      btn.textContent = `✓ 獲得ポイント2倍！（+${G.score.total}pt）`;
-      $('res-score').textContent = `${G.score.total} ×2`;
-    } else { btn.disabled = false; }
+      G.doubled = true; Storage.data.totalPoints += G.score.total; Storage.save();
+      btn.textContent = `✓ 獲得ポイント2倍！（+${G.score.total}pt）`; $('res-score').textContent = `${G.score.total} ×2`;
+    } else btn.disabled = false;
   });
   $('btn-share').addEventListener('click', async () => {
     if (!G) return;
-    const text = `【摘発カウントダウン】${G.B.name}で${fmtTime(G.min)}まで営業！ 売上${yen(G.sales)}・来客${G.customers}人・${G.score.rank}ランク（${G.score.total}点） #摘発カウントダウン`;
+    const text = G.outcome === 'bust'
+      ? `【摘発カウントダウン】${fmtTime(G.min)}に摘発されました…売上${yen(G.sales)}（${G.score.total}点） #摘発カウントダウン`
+      : `【摘発カウントダウン】朝まで逃げ切った！売上${yen(G.sales)}・警察を${G.stats.passed}回やり過ごし・${G.score.rank}ランク（${G.score.total}点） #摘発カウントダウン`;
     const url = location.href.split('?')[0];
     try {
       if (navigator.share) await navigator.share({ text, url });
-      else { await navigator.clipboard.writeText(text + ' ' + url); toastGlobal('結果をコピーしました'); }
+      else { await navigator.clipboard.writeText(text + ' ' + url); const b = $('btn-share'); b.textContent = 'コピーしました'; setTimeout(() => { b.textContent = '結果をシェア'; }, 1500); }
     } catch (e) { /* キャンセル */ }
   });
-  function toastGlobal(t) { const b = $('btn-share'); const o = b.textContent; b.textContent = t; setTimeout(() => { b.textContent = o; }, 1500); }
-
   document.addEventListener('keydown', (e) => {
-    if (e.repeat) return;
-    if (state === STATE.playing) {
-      if (e.code === 'Space' || e.code === 'Enter') { e.preventDefault(); serve(); }
-      else if (e.key === 'c' || e.key === 'C' || e.code === 'ShiftLeft') { check(); }
-    } else if ((state === STATE.investigation || state === STATE.correction) && (e.code === 'Space' || e.code === 'Enter')) {
-      e.preventDefault(); const b = $('inv-btn'); if (!b.disabled) b.click();
-    }
+    if (state !== STATE.playing || !G || G.paused || e.repeat) return;
+    if (e.code === 'Space' || e.code === 'Enter') { e.preventDefault(); seatGuest(); }
+    else if (['1', '2', '3'].includes(e.key)) tapCast(G.casts[+e.key - 1]);
+    else if (['q', 'w', 'e'].includes(e.key)) tapBoxCustomer('qwe'.indexOf(e.key));
   });
-  // バックグラウンド移行で一時停止
   document.addEventListener('visibilitychange', () => {
     if (document.hidden && state === STATE.playing && G && !G.paused) {
-      G.paused = true;
-      modal('<h2>一時停止中</h2><p>準備ができたら再開してください。</p>', [{ label: '再開', onClick: () => { G.paused = false; } }]);
+      G.paused = true; modal('<h2>一時停止中</h2>', [{ label: '再開', onClick: () => { G.paused = false; } }]);
     }
   });
 
   // ---------------------------------------------------------------- rendering
-  const canvas = $('scene'), ctx = canvas.getContext('2d');
   const app = $('app');
   let scale = 1, VH = H, OY = 0;
   function resize() {
     const vw = window.innerWidth, vh = window.innerHeight;
-    const w = Math.min(vw, (vh * 9) / 16);
-    const h = Math.min(vh, (w * 21) / 9); // 縦長端末は 9:21 まで縦に伸ばす
+    const w = Math.min(vw, (vh * 9) / 16), h = Math.min(vh, (w * 21) / 9);
     VH = (W * h) / w; OY = (VH - H) / 2;
     app.style.width = w + 'px'; app.style.height = h + 'px';
     document.documentElement.style.setProperty('--u', w / 360 + 'px');
@@ -774,267 +641,331 @@
   }
   window.addEventListener('resize', resize);
 
+  const FONT = '"Hiragino Kaku Gothic ProN","Hiragino Sans","Noto Sans JP","Yu Gothic",Meiryo,sans-serif';
   function rr(x, y, w, h, r) {
-    ctx.beginPath();
-    ctx.moveTo(x + r, y); ctx.arcTo(x + w, y, x + w, y + h, r); ctx.arcTo(x + w, y + h, x, y + h, r);
+    ctx.beginPath(); ctx.moveTo(x + r, y); ctx.arcTo(x + w, y, x + w, y + h, r); ctx.arcTo(x + w, y + h, x, y + h, r);
     ctx.arcTo(x, y + h, x, y, r); ctx.arcTo(x, y, x + w, y, r); ctx.closePath();
   }
-  const FONT = '"Hiragino Kaku Gothic ProN","Hiragino Sans","Noto Sans JP","Yu Gothic",Meiryo,sans-serif';
+  let T = 0;
+  function neon(text, x, y, size, color, alpha = 1) {
+    ctx.save(); ctx.globalAlpha *= alpha;
+    ctx.font = `900 ${size}px ${FONT}`; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+    ctx.shadowColor = color; ctx.shadowBlur = 16; ctx.fillStyle = color; ctx.fillText(text, x, y);
+    ctx.shadowBlur = 3; ctx.fillStyle = '#fff'; ctx.globalAlpha *= 0.8; ctx.fillText(text, x, y);
+    ctx.restore();
+  }
+  const flick = (s) => (Math.sin(T * 13 + s * 7) + Math.sin(T * 3.1 + s) > 1.75 ? 0.4 : 1);
 
-  // 背景（ビル群）をオフスクリーンに一度だけ描画
+  // 店内の静的背景をオフスクリーンに一度だけ描く
   let bgLayer = null;
   function buildBG() {
-    const S = 2;
-    const off = document.createElement('canvas'); off.width = W * S; off.height = H * S;
+    const S = 2, off = document.createElement('canvas'); off.width = W * S; off.height = H * S;
     const c = off.getContext('2d'); c.scale(S, S);
-    const r = mulberry32(20261116);
-    // 遠景
-    let x = -10;
-    while (x < W + 10) {
-      const w = 26 + r() * 46, h = 150 + r() * 210, top = 440 - h;
-      c.fillStyle = '#110b22'; c.fillRect(x, top, w, h);
-      for (let wy = top + 8; wy < 430; wy += 12) for (let wx = x + 5; wx < x + w - 6; wx += 9) {
-        if (r() < 0.32) { c.fillStyle = r() < 0.7 ? 'rgba(255,214,120,0.55)' : 'rgba(120,200,255,0.45)'; c.fillRect(wx, wy, 4, 6); }
+    const r = mulberry32(777);
+    const wall = c.createLinearGradient(0, 0, 0, 340);
+    wall.addColorStop(0, '#1a0f2e'); wall.addColorStop(1, '#2a1640');
+    c.fillStyle = wall; c.fillRect(0, 0, W, 340);
+    c.globalAlpha = 0.18; c.fillStyle = '#000';
+    for (let x = 0; x < W; x += 24) c.fillRect(x, 0, 2, 340);
+    c.globalAlpha = 1;
+    // 酒棚
+    c.fillStyle = '#120a1f'; c.fillRect(14, 160, 262, 120);
+    for (let row = 0; row < 3; row++) {
+      const sy = 198 + row * 36;
+      c.fillStyle = '#5a3a22'; c.fillRect(14, sy, 262, 5);
+      for (let x = 22; x < 268; x += 11 + r() * 6) {
+        const h = 16 + r() * 12, col = ['#3d7a3a', '#7a2a2a', '#c99a3a', '#2a4a7a', '#9a9aa8', '#5a2a6a'][Math.floor(r() * 6)];
+        c.fillStyle = col; c.globalAlpha = 0.85;
+        c.fillRect(x, sy - h, 7, h); c.fillRect(x + 2, sy - h - 6, 3, 6);
+        c.globalAlpha = 0.35; c.fillStyle = '#fff'; c.fillRect(x + 1, sy - h + 2, 1.5, h - 4); c.globalAlpha = 1;
       }
-      x += w + 2;
     }
-    // 近景（左右の雑居ビル）
-    c.fillStyle = '#0c0818'; c.fillRect(0, 130, 62, 320); c.fillRect(298, 110, 62, 340);
-    for (let wy = 150; wy < 430; wy += 22) for (const wx of [8, 34, 306, 332]) {
-      c.fillStyle = r() < 0.5 ? 'rgba(255,190,110,0.35)' : 'rgba(40,30,70,0.9)'; c.fillRect(wx, wy, 18, 12);
-    }
+    // 床
+    const floor = c.createLinearGradient(0, 330, 0, 640);
+    floor.addColorStop(0, '#2b1b2e'); floor.addColorStop(1, '#100912');
+    c.fillStyle = floor; c.fillRect(0, 330, W, 310);
+    c.globalAlpha = 0.12; c.strokeStyle = '#ff9ccc'; c.lineWidth = 1;
+    for (let i = -8; i < 16; i++) { c.beginPath(); c.moveTo(180 + i * 40, 330); c.lineTo(180 + i * 90, 700); c.stroke(); }
+    c.globalAlpha = 1;
     bgLayer = off;
   }
-  const STARS = Array.from({ length: 40 }, (_, i) => ({ x: (i * 97) % W, y: (i * 53) % 220, s: (i % 3) * 0.4 + 0.6 }));
 
-  let T = 0;
-  function neonText(text, x, y, size, color, flicker = 1, align = 'center') {
-    ctx.save();
-    ctx.font = `900 ${size}px ${FONT}`; ctx.textAlign = align; ctx.textBaseline = 'middle';
-    ctx.globalAlpha *= flicker;
-    ctx.shadowColor = color; ctx.shadowBlur = 16; ctx.fillStyle = color; ctx.fillText(text, x, y);
-    ctx.shadowBlur = 4; ctx.fillStyle = '#fff'; ctx.globalAlpha *= 0.85; ctx.fillText(text, x, y);
-    ctx.restore();
-  }
-  function flick(seed) { const v = Math.sin(T * 13 + seed * 7) + Math.sin(T * 3.1 + seed); return v > 1.7 ? 0.35 : 1; }
-
-  function drawVerticalSign(x, y, text, color, seed) {
-    ctx.save();
-    rr(x - 13, y - 6, 26, text.length * 22 + 12, 5); ctx.fillStyle = 'rgba(10,6,20,0.9)'; ctx.fill();
-    ctx.strokeStyle = color; ctx.lineWidth = 1.5; ctx.shadowColor = color; ctx.shadowBlur = 10; ctx.globalAlpha = flick(seed); ctx.stroke();
-    ctx.restore();
-    [...text].forEach((ch, i) => neonText(ch, x, y + 11 + i * 22, 17, color, flick(seed)));
-  }
-
-  function drawPerson(c) {
-    const x = c.x, y = c.y, bob = c.walking ? Math.abs(Math.sin(c.phase)) * 2 : 0;
-    ctx.save(); ctx.globalAlpha = clamp(c.alpha, 0, 1);
-    ctx.fillStyle = 'rgba(0,0,0,0.45)'; ctx.beginPath(); ctx.ellipse(x, y + 2, 15, 4, 0, 0, Math.PI * 2); ctx.fill();
-    const legSwing = c.walking ? Math.sin(c.phase) * 3 : 0;
-    ctx.fillStyle = '#16141f'; ctx.fillRect(x - 8 + legSwing, y - 24, 6, 24); ctx.fillRect(x + 2 - legSwing, y - 24, 6, 24);
-    rr(x - 13, y - 58 - bob, 26, 36, 9); ctx.fillStyle = c.color; ctx.fill();
-    if (c.kind === 'vip') { ctx.fillStyle = '#ffd54f'; ctx.fillRect(x - 1.5, y - 56 - bob, 3, 14); }
-    if (c.kind === 'minor') { ctx.fillStyle = '#7a5230'; rr(x + 9, y - 54 - bob, 8, 20, 3); ctx.fill(); }
-    ctx.fillStyle = c.skin; ctx.beginPath(); ctx.arc(x, y - 68 - bob, 10, 0, Math.PI * 2); ctx.fill();
-    ctx.fillStyle = c.hair; ctx.beginPath(); ctx.arc(x, y - 70 - bob, 10.5, Math.PI * 1.05, Math.PI * 1.95); ctx.fill();
-    if (c.group) { // 連れ
-      ctx.globalAlpha *= 0.85;
-      ctx.fillStyle = '#5c6bc0'; rr(x + 8, y - 50, 18, 28, 7); ctx.fill();
-      ctx.fillStyle = c.skin; ctx.beginPath(); ctx.arc(x + 17, y - 58, 8, 0, Math.PI * 2); ctx.fill();
+  // ---------- people
+  function drawHead(x, y, look, female) {
+    if (female) { ctx.fillStyle = look.hair; rr(x - 12, y - 8, 24, 30, 9); ctx.fill(); }
+    ctx.fillStyle = look.skin; ctx.beginPath(); ctx.arc(x, y, 10, 0, Math.PI * 2); ctx.fill();
+    ctx.fillStyle = look.hair; ctx.beginPath(); ctx.arc(x, y - 2, 10.5, Math.PI * 1.02, Math.PI * 1.98); ctx.fill();
+    if (look.glasses) { ctx.fillStyle = '#111'; ctx.fillRect(x - 9, y - 2, 18, 4); }
+    if (look.cap) {
+      ctx.fillStyle = '#16233f'; rr(x - 11, y - 15, 22, 8, 3); ctx.fill(); ctx.fillRect(x - 13, y - 8, 26, 3);
+      ctx.fillStyle = '#ffd54f'; ctx.fillRect(x - 2, y - 13, 4, 4);
     }
-    ctx.restore();
+    if (look.gold) { ctx.fillStyle = '#ffd54f'; ctx.fillRect(x - 1.5, y + 13, 3, 12); }
+    if (female && look.hl) { ctx.fillStyle = look.hl; ctx.beginPath(); ctx.arc(x + 7, y - 7, 3, 0, Math.PI * 2); ctx.fill(); }
   }
-
-  function drawStaff(x, y, color, hat) {
-    const c = { x, y, alpha: 1, walking: false, phase: 0, color, skin: '#f1c7a5', hair: '#1b1b1b', kind: 'staff' };
-    drawPerson(c);
-    ctx.save();
-    if (hat) { // 警察官の帽子
-      ctx.fillStyle = '#16233f'; rr(x - 11, y - 82, 22, 8, 3); ctx.fill(); ctx.fillRect(x - 13, y - 75, 26, 3);
-      ctx.fillStyle = '#ffd54f'; ctx.fillRect(x - 2, y - 80, 4, 4);
-    } else { // 蝶ネクタイ
-      ctx.fillStyle = '#ff2e88'; ctx.beginPath(); ctx.moveTo(x, y - 55); ctx.lineTo(x - 6, y - 59); ctx.lineTo(x - 6, y - 51); ctx.closePath(); ctx.fill();
-      ctx.beginPath(); ctx.moveTo(x, y - 55); ctx.lineTo(x + 6, y - 59); ctx.lineTo(x + 6, y - 51); ctx.closePath(); ctx.fill();
+  function drawStanding(x, y, look, opts = {}) {
+    const bob = opts.walking ? Math.abs(Math.sin(opts.phase || 0)) * 2 : 0;
+    const sw = opts.walking ? Math.sin(opts.phase || 0) * 3 : 0;
+    ctx.fillStyle = 'rgba(0,0,0,0.35)'; ctx.beginPath(); ctx.ellipse(x, y + 2, 14, 4, 0, 0, Math.PI * 2); ctx.fill();
+    if (opts.female) {
+      ctx.fillStyle = look.skin; ctx.fillRect(x - 6 + sw, y - 22, 4, 22); ctx.fillRect(x + 2 - sw, y - 22, 4, 22);
+      ctx.fillStyle = look.body; ctx.beginPath(); ctx.moveTo(x - 8, y - 56 - bob); ctx.lineTo(x + 8, y - 56 - bob); ctx.lineTo(x + 15, y - 20); ctx.lineTo(x - 15, y - 20); ctx.closePath(); ctx.fill();
+    } else {
+      ctx.fillStyle = '#16141f'; ctx.fillRect(x - 8 + sw, y - 24, 6, 24); ctx.fillRect(x + 2 - sw, y - 24, 6, 24);
+      rr(x - 13, y - 58 - bob, 26, 36, 9); ctx.fillStyle = look.body; ctx.fill();
     }
-    ctx.restore();
+    drawHead(x, y - 68 - bob, look, opts.female);
   }
+  const castLook = (c) => ({ body: c.dress, hair: c.hair, skin: '#f6d2b8', hl: c.hl });
 
   function drawBubble(c) {
-    if (!c.arrived) return;
-    ctx.save();
-    ctx.font = `bold 12.5px ${FONT}`;
-    const text = c.icon + ' ' + c.text;
-    const w = Math.min(ctx.measureText(text).width + 22, 300), h = 34;
-    const bx = clamp(c.x - w / 2, 6, W - 6 - w), by = c.y - 128;
-    rr(bx, by, w, h, 10);
-    ctx.fillStyle = c.kind === 'vip' ? '#fff6d6' : 'rgba(255,255,255,0.96)'; ctx.fill();
-    ctx.strokeStyle = c.kind === 'vip' ? '#ffb300' : '#ff2e88'; ctx.lineWidth = 2; ctx.stroke();
-    ctx.beginPath(); ctx.moveTo(c.x - 6, by + h); ctx.lineTo(c.x + 2, by + h + 9); ctx.lineTo(c.x + 7, by + h);
-    ctx.fillStyle = c.kind === 'vip' ? '#fff6d6' : 'rgba(255,255,255,0.96)'; ctx.fill();
-    ctx.fillStyle = '#1a1026'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
-    ctx.fillText(text, bx + w / 2, by + 14);
-    const p = clamp(c.stay / c.maxStay, 0, 1);
-    ctx.fillStyle = '#ddd'; ctx.fillRect(bx + 10, by + h - 7, w - 20, 3);
-    ctx.fillStyle = p > 0.5 ? '#2ecc71' : p > 0.25 ? '#f1c40f' : '#e74c3c'; ctx.fillRect(bx + 10, by + h - 7, (w - 20) * p, 3);
+    ctx.save(); ctx.font = `bold 12px ${FONT}`;
+    const text = c.text, w = Math.min(ctx.measureText(text).width + 20, 230), h = 30;
+    const bx = clamp(c.x - w + 24, 6, W - 6 - w), by = c.y - 126;
+    const gold = c.kind === 'vip';
+    rr(bx, by, w, h, 10); ctx.fillStyle = gold ? '#fff6d6' : 'rgba(255,255,255,0.96)'; ctx.fill();
+    ctx.strokeStyle = gold ? '#ffb300' : '#ff2e88'; ctx.lineWidth = 2; ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(c.x - 8, by + h); ctx.lineTo(c.x - 2, by + h + 8); ctx.lineTo(c.x + 2, by + h); ctx.fillStyle = gold ? '#fff6d6' : '#fff'; ctx.fill();
+    ctx.fillStyle = '#1a1026'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillText(text, bx + w / 2, by + 13);
+    const p = clamp(c.wait / c.maxWait, 0, 1);
+    ctx.fillStyle = '#ddd'; ctx.fillRect(bx + 10, by + h - 6, w - 20, 3);
+    ctx.fillStyle = p > 0.5 ? '#2ecc71' : p > 0.25 ? '#f1c40f' : '#e74c3c'; ctx.fillRect(bx + 10, by + h - 6, (w - 20) * p, 3);
     ctx.restore();
   }
 
-  function drawPatienceDot(c) {
-    const p = clamp(c.stay / c.maxStay, 0, 1);
-    ctx.save(); ctx.globalAlpha = c.alpha;
-    ctx.strokeStyle = p > 0.5 ? '#2ecc71' : p > 0.25 ? '#f1c40f' : '#e74c3c'; ctx.lineWidth = 3;
-    ctx.beginPath(); ctx.arc(c.x, c.y - 96, 6, -Math.PI / 2, -Math.PI / 2 + Math.PI * 2 * p); ctx.stroke();
-    ctx.font = `12px ${FONT}`; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillText(c.icon, c.x, c.y - 96);
+  function drawPolice(two) {
+    const look = { body: '#24345a', hair: '#111', skin: '#f1c7a5', cap: true };
+    if (two) drawStanding(DOOR.x + 2, 418, look);
+    drawStanding(DOOR.x + 28, 428, look);
+  }
+
+  function drawCounterCast(c) {
+    const x = CAST_HOME[c.i], y = COUNTER_TOP + 8;
+    drawStanding(x, y, castLook(c), { female: true });
+    if (G && state === STATE.playing && G.seats[c.i] && c.state === 'counter') {
+      ctx.save(); ctx.font = `bold 10px ${FONT}`; ctx.textAlign = 'center'; ctx.fillStyle = '#ff9ccc';
+      ctx.globalAlpha = 0.6 + 0.4 * Math.sin(T * 6); ctx.fillText('👆隣へ', x, y - 92); ctx.restore();
+    }
+  }
+
+  // 後ろ姿で座っている人（カウンターに向かっている）
+  function drawBack(x, seatY, look, opts = {}) {
+    ctx.save(); ctx.translate(x, seatY); ctx.rotate(opts.lean || 0);
+    ctx.fillStyle = opts.female ? look.skin : '#16141f';
+    ctx.fillRect(-7, 2, 5, 20); ctx.fillRect(2, 2, 5, 20);
+    if (opts.female) {
+      ctx.fillStyle = look.body; ctx.beginPath(); ctx.moveTo(-9, -34); ctx.lineTo(9, -34); ctx.lineTo(14, 4); ctx.lineTo(-14, 4); ctx.closePath(); ctx.fill();
+    } else { rr(-14, -38, 28, 42, 10); ctx.fillStyle = look.body; ctx.fill(); ctx.fillStyle = 'rgba(0,0,0,0.18)'; ctx.fillRect(-1, -34, 2, 36); }
+    if (opts.arm) {
+      ctx.strokeStyle = opts.female ? look.skin : look.body; ctx.lineWidth = 5; ctx.lineCap = 'round';
+      ctx.beginPath(); ctx.moveTo(opts.arm * 9, -28); ctx.lineTo(opts.arm * 22, -24 + Math.sin(T * 5) * 2); ctx.stroke();
+    }
+    if (opts.drinkArm) { // グラスを口へ
+      ctx.strokeStyle = look.body; ctx.lineWidth = 5; ctx.lineCap = 'round';
+      ctx.beginPath(); ctx.moveTo(-9, -28); ctx.lineTo(-13, -46); ctx.stroke();
+      ctx.font = `11px ${FONT}`; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillText(opts.drinkArm, -14, -52);
+    }
+    ctx.fillStyle = look.skin; ctx.beginPath(); ctx.arc(-10, -46, 3, 0, Math.PI * 2); ctx.arc(10, -46, 3, 0, Math.PI * 2); ctx.fill();
+    ctx.fillStyle = look.hair; ctx.beginPath(); ctx.arc(0, -47, 10.5, 0, Math.PI * 2); ctx.fill();
+    if (opts.female) { rr(-11, -48, 22, 30, 8); ctx.fill(); if (look.hl) { ctx.fillStyle = look.hl; ctx.beginPath(); ctx.arc(-6, -54, 3, 0, Math.PI * 2); ctx.fill(); } }
+    if (look.gold) { ctx.fillStyle = '#ffd54f'; ctx.fillRect(-14, -12, 28, 3); }
+    if (look.glasses) { ctx.fillStyle = '#111'; ctx.fillRect(-11, -47, 3, 2); ctx.fillRect(8, -47, 3, 2); }
     ctx.restore();
   }
 
-  function drawPoliceCar(t) {
-    const x = lerp(-130, 4, t);
-    ctx.save();
-    ctx.fillStyle = 'rgba(0,0,0,0.5)'; ctx.beginPath(); ctx.ellipse(x + 55, 492, 60, 6, 0, 0, Math.PI * 2); ctx.fill();
-    rr(x, 458, 112, 30, 8); ctx.fillStyle = '#f4f4f4'; ctx.fill();
-    ctx.fillStyle = '#111'; ctx.fillRect(x, 474, 112, 14);
-    rr(x + 24, 440, 62, 22, 7); ctx.fillStyle = '#f4f4f4'; ctx.fill();
-    ctx.fillStyle = '#7fb3ff'; ctx.fillRect(x + 30, 445, 22, 13); ctx.fillRect(x + 57, 445, 23, 13);
-    const on = Math.floor(T * 8) % 2 === 0;
-    ctx.shadowBlur = 22;
-    ctx.shadowColor = on ? '#ff1e3c' : '#1e5bff'; ctx.fillStyle = on ? '#ff1e3c' : '#1e5bff';
-    rr(x + 40, 432, 30, 8, 3); ctx.fill();
-    ctx.shadowBlur = 0;
-    ctx.fillStyle = '#222'; ctx.beginPath(); ctx.arc(x + 24, 489, 9, 0, Math.PI * 2); ctx.arc(x + 88, 489, 9, 0, Math.PI * 2); ctx.fill();
-    ctx.font = `bold 9px ${FONT}`; ctx.fillStyle = '#fff'; ctx.textAlign = 'center'; ctx.fillText('POLICE', x + 56, 482);
+  function drawStool(x) {
+    ctx.fillStyle = '#1a1a1a'; ctx.fillRect(x - 2, SEAT_Y + 4, 4, 36);
+    ctx.fillStyle = '#333'; ctx.fillRect(x - 10, SEAT_Y + 38, 20, 3);
+    ctx.fillStyle = '#7a1f4a'; rr(x - 14, SEAT_Y - 2, 28, 9, 4); ctx.fill();
+  }
+
+  function label(text, x, y, color, size = 10) {
+    ctx.save(); ctx.font = `bold ${size}px ${FONT}`; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+    ctx.lineWidth = 3; ctx.strokeStyle = 'rgba(0,0,0,0.75)'; ctx.strokeText(text, x, y); ctx.fillStyle = color; ctx.fillText(text, x, y); ctx.restore();
+  }
+
+  function drawPair(i) {
+    const cx = PAIR_X[i], b = G && G.seats[i], cast = G ? G.casts[i] : null;
+    const withCast = cast && cast.state === 'box';
+    const ux = cx + CUST_DX;
+    // カウンター上の空きグラス（飲んだ分）
+    if (b && b.drinks) {
+      const icons = C.drinks.slice(0, Math.min(b.drinks, C.drinks.length)).map((d) => d[0]).join('');
+      ctx.save(); ctx.globalAlpha = 0.55; ctx.font = `10px ${FONT}`; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+      ctx.fillText(icons, cx, COUNTER_TOP - 12); ctx.restore();
+    }
+    drawStool(ux); drawStool(cx + CAST_DX);
+    if (b) {
+      const lean = b.cheer > 0 ? Math.sin(T * 30) * 0.08 : withCast ? 0.06 : 0;
+      const sip = b.drinking > 0 ? b.glass : null;
+      drawBack(ux, SEAT_Y, b.look, { lean, arm: withCast && !sip ? 1 : 0, drinkArm: sip });
+      if (b.kind === 'vip' || b.kind === 'undercover') label(b.kind === 'vip' ? '💎' : '🕶', ux - 18, SEAT_Y - 60, '#fff', 12);
+      // 滞在時間
+      const p = clamp(b.stay / b.maxStay, 0, 1);
+      ctx.fillStyle = 'rgba(255,255,255,0.2)'; ctx.fillRect(ux - 16, SEAT_Y + 46, 32, 3);
+      ctx.fillStyle = '#ff9ccc'; ctx.fillRect(ux - 16, SEAT_Y + 46, 32 * p, 3);
+      if (b.drinking > 0) {
+        // 飲み終わるまでのゲージ
+        const q = 1 - b.drinking / b.drinkMax;
+        ctx.fillStyle = 'rgba(0,0,0,0.6)'; rr(ux - 18, SEAT_Y + 54, 36, 7, 3); ctx.fill();
+        ctx.fillStyle = '#ffd54f'; rr(ux - 17, SEAT_Y + 55, 34 * q, 5, 2); ctx.fill();
+        label('ゴクゴク…', ux, SEAT_Y + 70, '#fff', 9);
+      } else if (withCast && !b.leaving && state === STATE.playing) {
+        const next = C.drinks[Math.min(b.drinks, C.drinks.length - 1)];
+        ctx.save(); ctx.globalAlpha = 0.75 + 0.25 * Math.sin(T * 8);
+        label(b.drinks ? `👆おかわり${next[0]}` : `👆${next[0]}${next[1]}`, ux + 4, SEAT_Y + 62, '#ffe08a'); ctx.restore();
+      }
+    }
+    if (withCast) {
+      drawBack(cx + CAST_DX, SEAT_Y, castLook(cast), { female: true, lean: -0.14, arm: -1 });
+      ctx.save(); ctx.globalAlpha = 0.7 + 0.3 * Math.sin(T * 5); ctx.font = `11px ${FONT}`; ctx.textAlign = 'center';
+      ctx.fillText('💗', cx, SEAT_Y - 66 + Math.sin(T * 3) * 3); ctx.restore();
+      label(cast.name, cx + CAST_DX + 2, SEAT_Y + 32, cast.hl, 9);
+      if (G.visit) { // ノック中は隣のキャストを赤く強調
+        ctx.save(); ctx.strokeStyle = '#ff3355'; ctx.lineWidth = 3; ctx.globalAlpha = 0.5 + 0.5 * Math.sin(T * 18);
+        ctx.beginPath(); ctx.arc(cx + CAST_DX, SEAT_Y - 30, 30, 0, Math.PI * 2); ctx.stroke(); ctx.restore();
+        label('👆逃がせ！', cx + CAST_DX, SEAT_Y - 70, '#ff6b85', 10);
+      }
+    }
+  }
+
+  function speech(text, x, y, color = '#fff', border = '#4d7cff') {
+    ctx.save(); ctx.font = `bold 11px ${FONT}`;
+    const w = ctx.measureText(text).width + 16, h = 24, bx = clamp(x - w / 2, 4, W - 4 - w);
+    rr(bx, y - h, w, h, 8); ctx.fillStyle = color; ctx.fill(); ctx.strokeStyle = border; ctx.lineWidth = 2; ctx.stroke();
+    ctx.fillStyle = '#1a1026'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillText(text, bx + w / 2, y - h / 2);
     ctx.restore();
+  }
+  function drawQuestioning() {
+    const look = { body: '#24345a', hair: '#111', skin: '#f1c7a5', cap: true };
+    const p = G.caught.pos;
+    drawStanding(DOOR.x + 28, 428, look); // 入口に立つ1人
+    const t = clamp(G.bustT / 0.8, 0, 1), e = easeInOut(t);
+    const tx = p.x + 30, ty = SEAT_Y + 40;
+    const x = lerp(DOOR.x + 6, tx, e), y = lerp(422, ty, e);
+    drawStanding(x, y, look, { walking: t < 1, phase: T * 12 });
+    if (t >= 1) {
+      speech('お姉さん、ここで何してるの？', clamp(x - 20, 90, 270), y - 92);
+      if (G.bustT > 1.1) speech('えっと…お客さんの隣で接客を…', clamp(p.x, 100, 260), p.y - 64, '#ffe0ef', '#ff2e88');
+    }
   }
 
   function render(dt) {
     T += dt;
     ctx.setTransform(scale, 0, 0, scale, 0, OY * scale);
-    ctx.fillStyle = '#06040c'; ctx.fillRect(0, -OY, W, VH);
-    const min = G ? G.min : 0;
-    const dawn = clamp((min - 330) / 90, 0, 1); // 03:30以降に夜明け
+    ctx.fillStyle = '#1a0f2e'; ctx.fillRect(0, -OY, W, OY + 2);
+    ctx.fillStyle = '#100912'; ctx.fillRect(0, H - 2, W, OY + 4);
     ctx.save();
-    if (G && G.shake > 0) ctx.translate((vrand() - 0.5) * 6, (vrand() - 0.5) * 6);
-
-    // 空
-    const sky = ctx.createLinearGradient(0, -OY, 0, 460);
-    sky.addColorStop(0, mixColor('#05030f', '#2a2a6e', dawn));
-    sky.addColorStop(0.6, mixColor('#170a30', '#b0558f', dawn));
-    sky.addColorStop(1, mixColor('#2b0f3f', '#ffb27a', dawn));
-    ctx.fillStyle = sky; ctx.fillRect(0, -OY, W, 460 + OY);
-    ctx.fillStyle = `rgba(255,255,255,${0.7 * (1 - dawn)})`;
-    STARS.forEach((s) => { ctx.globalAlpha = (0.5 + 0.5 * Math.sin(T * 2 + s.x)) * (1 - dawn); ctx.fillRect(s.x, s.y, s.s, s.s); });
-    ctx.globalAlpha = 1;
-    if (dawn > 0) { // 朝日
-      const g = ctx.createRadialGradient(180, 470, 10, 180, 470, 220);
-      g.addColorStop(0, `rgba(255,220,150,${0.8 * dawn})`); g.addColorStop(1, 'rgba(255,180,120,0)');
-      ctx.fillStyle = g; ctx.fillRect(0, 200, W, 280);
-    }
+    if (G && G.shake > 0) ctx.translate((vrand() - 0.5) * 7, (vrand() - 0.5) * 7);
     if (bgLayer) ctx.drawImage(bgLayer, 0, 0, W, H);
 
-    // 近景の看板（架空）
-    drawVerticalSign(31, 150, 'スナック', '#ff4fd8', 1);
-    drawVerticalSign(329, 128, 'カラオケ', '#3ff2ff', 2);
-    neonText('居酒屋', 31, 360, 13, '#ffcc33', flick(3));
-    neonText('BAR', 329, 360, 15, '#7cff6b', flick(4));
+    // 間接照明・店内ネオン
+    const lamp = ctx.createRadialGradient(140, 150, 10, 140, 150, 220);
+    lamp.addColorStop(0, 'rgba(255,120,200,0.18)'); lamp.addColorStop(1, 'rgba(255,120,200,0)');
+    ctx.fillStyle = lamp; ctx.fillRect(0, 0, W, 360);
+    neon(STORE, 145, 140, 22, '#ff5fb0', flick(1));
+    neon('♪', 26, 140, 18, '#3ff2ff', flick(2));
 
-    // 店舗
-    const B = G ? G.B : BUSINESS[businessType];
-    ctx.fillStyle = '#1d1233'; ctx.fillRect(68, 196, 224, 248);
-    ctx.fillStyle = '#25173f'; ctx.fillRect(68, 196, 224, 10);
-    // 看板
-    rr(86, 168, 188, 40, 8); ctx.fillStyle = '#0b0614'; ctx.fill();
-    ctx.save(); ctx.strokeStyle = '#ff2e88'; ctx.shadowColor = '#ff2e88'; ctx.shadowBlur = 12; ctx.lineWidth = 2; rr(86, 168, 188, 40, 8); ctx.stroke(); ctx.restore();
-    neonText(B.store, 180, 189, 21, '#ff5fb0', flick(5));
-    // 窓
-    const open = !G || (state === STATE.playing && G.checking <= 0);
-    const warm = open ? 'rgba(255,190,110,0.85)' : 'rgba(120,110,160,0.5)';
-    for (const wx of [80, 224]) {
-      const g = ctx.createLinearGradient(0, 240, 0, 360); g.addColorStop(0, warm); g.addColorStop(1, 'rgba(255,120,80,0.5)');
-      ctx.fillStyle = g; ctx.fillRect(wx, 240, 56, 112);
-      ctx.strokeStyle = '#3a2a5a'; ctx.lineWidth = 3; ctx.strokeRect(wx, 240, 56, 112); ctx.fillStyle = '#3a2a5a'; ctx.fillRect(wx + 26, 240, 3, 112);
-      // 店内シルエット
-      ctx.fillStyle = 'rgba(40,20,40,0.55)';
-      for (let i = 0; i < 2; i++) { ctx.beginPath(); ctx.arc(wx + 16 + i * 24, 318 + Math.sin(T * 2 + i + wx) * 1.5, 7, 0, Math.PI * 2); ctx.fill(); ctx.fillRect(wx + 9 + i * 24, 325, 14, 27); }
-    }
     // ドア
-    ctx.fillStyle = open ? '#ffcf86' : '#2a2140'; ctx.fillRect(152, 350, 56, 94);
-    ctx.strokeStyle = '#4a3770'; ctx.lineWidth = 3; ctx.strokeRect(152, 350, 56, 94);
-    if (open) { const g = ctx.createRadialGradient(180, 444, 5, 180, 444, 80); g.addColorStop(0, 'rgba(255,200,120,0.35)'); g.addColorStop(1, 'rgba(255,200,120,0)'); ctx.fillStyle = g; ctx.fillRect(100, 400, 160, 90); }
-    if (G && G.checking > 0) {
-      ctx.fillStyle = '#ffcc33'; rr(140, 380, 80, 22, 4); ctx.fill();
-      ctx.font = `bold 12px ${FONT}`; ctx.fillStyle = '#222'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillText('営業確認中', 180, 391);
+    const v = G && G.visit;
+    const doorOpen = (v && v.phase === 'inside') || (state === STATE.ending && G && G.outcome === 'bust');
+    ctx.fillStyle = '#0d0716'; ctx.fillRect(DOOR.x - 4, DOOR.y - 4, DOOR.w + 8, DOOR.h + 4);
+    if (doorOpen) {
+      ctx.fillStyle = '#0a1028'; ctx.fillRect(DOOR.x, DOOR.y, DOOR.w, DOOR.h);
+      ctx.fillStyle = '#5a3a66'; ctx.fillRect(DOOR.x, DOOR.y, 10, DOOR.h);
+    } else {
+      ctx.fillStyle = '#4a2d55'; ctx.fillRect(DOOR.x, DOOR.y, DOOR.w, DOOR.h);
+      ctx.fillStyle = '#ffd54f'; ctx.fillRect(DOOR.x + 8, DOOR.y + 90, 4, 16);
+      const win = { x: DOOR.x + 10, y: DOOR.y + 14, w: DOOR.w - 20, h: 48 };
+      const knocking = v && v.phase === 'knock';
+      ctx.fillStyle = knocking ? '#3a3f70' : '#1f2340'; ctx.fillRect(win.x, win.y, win.w, win.h);
+      if (knocking) {
+        ctx.save(); ctx.font = `30px ${FONT}`; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+        ctx.fillText(v.who.icon, win.x + win.w / 2, win.y + win.h / 2 + 2); ctx.restore();
+        ctx.save(); ctx.strokeStyle = v.kind === 'police' ? '#ff3355' : '#ffcc33'; ctx.lineWidth = 3;
+        ctx.globalAlpha = 0.5 + 0.5 * Math.sin(T * 20); ctx.strokeRect(DOOR.x - 3, DOOR.y - 3, DOOR.w + 6, DOOR.h + 3); ctx.restore();
+        ctx.save(); ctx.font = `bold 12px ${FONT}`; ctx.fillStyle = '#fff'; ctx.textAlign = 'center';
+        ctx.fillText(v.reason === 'raid' ? 'ドンドン!!' : 'コンコン', DOOR.x + DOOR.w / 2 - 6 + Math.sin(T * 30) * 2, DOOR.y - 10); ctx.restore();
+      }
+      ctx.strokeStyle = '#2a1a33'; ctx.lineWidth = 2; ctx.strokeRect(win.x, win.y, win.w, win.h);
     }
-    // 営業状態ランプ
-    const n = G ? G.issues.length : 0;
-    const lamp = n === 0 ? '#2ef58a' : n < C.seriousIssueCount ? '#ffcc33' : '#ff3355';
-    ctx.save(); ctx.fillStyle = lamp; ctx.shadowColor = lamp; ctx.shadowBlur = 14; ctx.beginPath(); ctx.arc(180, 338, 5, 0, Math.PI * 2); ctx.fill(); ctx.restore();
 
-    // 路面
-    const road = ctx.createLinearGradient(0, 444, 0, H + OY);
-    road.addColorStop(0, mixColor('#140c24', '#3a2c48', dawn)); road.addColorStop(1, '#06040c');
-    ctx.fillStyle = road; ctx.fillRect(0, 444, W, H + OY - 444);
-    // ネオンの映り込み
-    ctx.save(); ctx.globalAlpha = 0.18 * (1 - dawn * 0.7);
-    [['#ff2e88', 180, 60], ['#ff4fd8', 31, 16], ['#3ff2ff', 329, 16]].forEach(([col, x, w]) => {
-      const g = ctx.createLinearGradient(0, 446, 0, 620); g.addColorStop(0, col); g.addColorStop(1, 'rgba(0,0,0,0)');
-      ctx.fillStyle = g; ctx.fillRect(x - w / 2, 446, w, 170);
-    });
-    ctx.restore();
+    // カウンター内のキャスト（下半身はカウンターに隠れる）
+    if (G) G.casts.forEach((c) => { if (c.state === 'counter') drawCounterCast(c); });
+    else CASTS.forEach((c, i) => drawCounterCast({ ...c, i, state: 'counter' }));
+    // マスター
+    drawStanding(236, COUNTER_TOP + 10, { body: '#2b2b2b', hair: '#666', skin: '#e9bf9c' });
+    ctx.fillStyle = '#ff2e88'; ctx.fillRect(232, COUNTER_TOP - 54, 8, 4);
+
+    // カウンター
+    ctx.fillStyle = '#6b3f22'; ctx.fillRect(0, COUNTER_TOP - 6, 284, 12);
+    ctx.fillStyle = '#c98a4a'; ctx.fillRect(0, COUNTER_TOP - 6, 284, 3);
+    ctx.fillStyle = '#3a2016'; ctx.fillRect(0, COUNTER_TOP + 6, 278, 58);
+    ctx.save(); ctx.strokeStyle = '#ff2e88'; ctx.shadowColor = '#ff2e88'; ctx.shadowBlur = 8; ctx.lineWidth = 1.5;
+    ctx.beginPath(); ctx.moveTo(0, COUNTER_TOP + 62); ctx.lineTo(278, COUNTER_TOP + 62); ctx.stroke(); ctx.restore();
+    // カウンター席（客＋隣のキャスト）
+    PAIR_X.forEach((_, i) => drawPair(i));
 
     if (G) {
-      // パトカー・警察官
-      const showP = G.police !== 0;
-      const pt = G.police > 0 ? G.police : Math.max(0, 1 - (-G.police - 1));
-      if (showP) {
-        drawPoliceCar(pt);
-        if (state === STATE.investigation || state === STATE.correction) { drawStaff(118, FEET_Y, '#24345a', true); drawStaff(144, FEET_Y, '#24345a', true); }
+      for (let i = G.queue.length - 1; i >= 0; i--) {
+        const c = G.queue[i];
+        drawStanding(c.x, c.y, c.look, { walking: c.walking, phase: c.phase });
       }
-      // 店員
-      drawStaff(state === STATE.investigation || state === STATE.correction ? 196 : 132, FEET_Y, '#2b2b2b', false);
-      // 客
-      const all = G.leaving.concat(G.queue.slice().reverse());
-      all.forEach(drawPerson);
-      G.queue.slice(1).forEach(drawPatienceDot);
-      if (G.queue[0]) drawBubble(G.queue[0]);
-      // パーティクル・ポップアップ
+      if (G.queue[0] && Math.abs(G.queue[0].x - QUEUE[0].x) < 6 && state === STATE.playing) drawBubble(G.queue[0]);
+      G.walkers.forEach((w) => { ctx.save(); ctx.globalAlpha = clamp(w.alpha, 0, 1) * 0.9; drawStanding(w.x, w.y, w.look, { walking: true, phase: w.phase }); ctx.restore(); });
+      // 移動中のキャスト（最前面）
+      G.casts.forEach((c) => { if (c.state === 'toBox' || c.state === 'toCounter') { const p = castPos(c); drawStanding(p.x, p.y, castLook(c), { female: true, walking: true, phase: T * 14 }); } });
+      // 来訪者
+      const bustNow = state === STATE.ending && G.outcome === 'bust';
+      if (bustNow && G.caught) drawQuestioning();
+      else if (v && v.phase === 'inside' && v.kind === 'police') {
+        drawPolice(v.reason !== 'patrol');
+        ctx.save(); ctx.globalAlpha = 0.16; ctx.fillStyle = '#fffbe0';
+        const ang = Math.sin(T * 2.2) * 0.55 + Math.PI * 0.9;
+        ctx.beginPath(); ctx.moveTo(DOOR.x + 18, 372); ctx.arc(DOOR.x + 18, 372, 330, ang - 0.17, ang + 0.17); ctx.closePath(); ctx.fill(); ctx.restore();
+      } else if (v && v.phase === 'inside') {
+        ctx.save(); ctx.font = `34px ${FONT}`; ctx.textAlign = 'center'; ctx.fillText(v.who.icon, DOOR.x + 28, 400); ctx.restore();
+      }
       G.particles.forEach((q) => { ctx.globalAlpha = clamp(q.life, 0, 1); ctx.fillStyle = q.c; ctx.fillRect(q.x, q.y, 3, 3); });
       ctx.globalAlpha = 1;
       G.popups.forEach((q) => {
-        ctx.save(); ctx.globalAlpha = clamp(q.life / q.max * 1.5, 0, 1);
-        ctx.font = `900 15px ${FONT}`; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
-        ctx.lineWidth = 4; ctx.strokeStyle = 'rgba(0,0,0,0.8)'; ctx.strokeText(q.text, q.x, q.y); ctx.fillStyle = q.color; ctx.fillText(q.text, q.x, q.y);
+        ctx.save(); ctx.globalAlpha = clamp((q.life / q.max) * 1.5, 0, 1);
+        ctx.font = `900 14px ${FONT}`; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+        ctx.lineWidth = 4; ctx.strokeStyle = 'rgba(0,0,0,0.85)'; ctx.strokeText(q.text, q.x, q.y); ctx.fillStyle = q.color; ctx.fillText(q.text, q.x, q.y);
         ctx.restore();
       });
-      // 立入調査の赤青ライト
-      if (state === STATE.investigation || state === STATE.correction) {
-        ctx.fillStyle = Math.floor(T * 4) % 2 ? 'rgba(255,30,60,0.12)' : 'rgba(30,90,255,0.12)'; ctx.fillRect(0, -OY, W, VH);
+      if ((v && v.kind === 'police' && v.phase === 'inside') || (bustNow && G.bustT > 1.5)) {
+        ctx.fillStyle = Math.floor(T * 5) % 2 ? 'rgba(255,30,60,0.14)' : 'rgba(30,90,255,0.14)'; ctx.fillRect(0, -OY, W, VH);
       }
-    } else {
-      drawStaff(132, FEET_Y, '#2b2b2b', false);
+      if (G.flash > 0 && (!bustNow || G.bustT > 1.5)) { ctx.fillStyle = `rgba(255,255,255,${G.flash * 0.6})`; ctx.fillRect(0, -OY, W, VH); }
+      if (bustNow && G.bustT > 1.5) {
+        const s = Math.min(1, (G.bustT - 1.5) * 3);
+        ctx.save(); ctx.translate(180, 250); ctx.scale(0.5 + s * 0.6, 0.5 + s * 0.6); ctx.rotate(-0.12);
+        ctx.fillStyle = '#d4001e'; rr(-110, -34, 220, 68, 8); ctx.fill();
+        ctx.strokeStyle = '#fff'; ctx.lineWidth = 4; rr(-104, -28, 208, 56, 6); ctx.stroke();
+        ctx.font = `900 40px ${FONT}`; ctx.fillStyle = '#fff'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillText('摘 発 ！', 0, 2);
+        ctx.restore();
+      }
+      if (state === STATE.ending && G.outcome === 'clear') { ctx.fillStyle = 'rgba(255,200,140,0.25)'; ctx.fillRect(0, -OY, W, VH); }
     }
     ctx.restore();
   }
 
-  // ---------------------------------------------------------------- loop（経過時間ベース）
+  // ---------------------------------------------------------------- loop
   let last = performance.now();
   function frame(now) {
-    const realDt = Math.min(0.1, Math.max(0, (now - last) / 1000));
-    last = now;
-    const dt = realDt * SPEED;
+    const realDt = Math.min(0.1, Math.max(0, (now - last) / 1000)); last = now;
     try {
-      update(dt);
-      if (state === STATE.playing || state === STATE.investigation || state === STATE.correction) updateHUD();
+      update(realDt * SPEED);
+      if (state === STATE.playing) updateHUD();
       render(realDt);
     } catch (e) { console.error(e); }
     requestAnimationFrame(frame);
   }
 
-  // ---------------------------------------------------------------- boot
-  Storage.load();
-  businessType = BUSINESS[Storage.data.lastType] ? Storage.data.lastType : 'generalRestaurant';
-  resize(); buildBG(); renderTitle();
+  Storage.load(); resize(); buildBG(); renderTitle();
   requestAnimationFrame(frame);
 
   // テスト用フック
-  window.__game = { get state() { return state; }, get G() { return G; }, serve, check, startGame, STATE };
+  window.__game = { get state() { return state; }, get G() { return G; }, seatGuest, tapCast, tapBoxCustomer, startGame };
 })();
