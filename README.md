@@ -54,7 +54,7 @@ Settings → Pages → Source を「Deploy from a branch」、Branch を `main` 
   - バナー：タイトル・あそびかた・ポーズ・結果画面の下中央
   - 全画面広告：プレイ開始・トップへ戻る・ポーズからの再開・もう一度 のたびに
   - リワード：摘発されたとき「広告を見て もみ消す」で、摘発をなかったことにして営業を続ける（1 ゲーム 1 回）
-  - AdMob のアプリ ID は `android/app/src/main/res/values/strings.xml` の `admob_app_id`、本番の広告ユニット ID は `js/ads.js` の `production`（バナー・インタースティシャルは設定済み。リワードは未設定で、本番ビルドでは出ない）
+  - AdMob のアプリ ID は `android/app/src/main/res/values/strings.xml` の `admob_app_id`、本番の広告ユニット ID は `js/ads.js` の `production`（3 種類とも設定済み）
 - ローカルでのビルド：
   ```bash
   npm ci
