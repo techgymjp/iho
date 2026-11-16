@@ -28,7 +28,11 @@
       <button class="btn btn-ghost" id="btn-sound">🔊 サウンド ON</button>
     </div>
     <p class="disclaimer">※本作はフィクションです。実在の人物・団体・店舗・事件とは関係ありません。現実の無許可営業は法律で禁止されています。</p>
-    <div class="ad-banner" id="ad-banner">AD ・ AdMob バナー枠</div>
+    <div id="legal" class="legal hidden">
+      <span id="build-info"></span>
+      <a href="https://techgym.jp/privacy-policy/" target="_blank" rel="noopener">プライバシーポリシー</a>
+      <span id="ad-privacy" class="hidden">｜<a href="#" id="ad-privacy-link">広告の設定</a></span>
+    </div>
   </section>
 
   <!-- ===== GAME ===== -->
@@ -69,7 +73,6 @@
       <div class="res-best" id="res-best"></div>
       <div class="res-breakdown" id="res-breakdown"></div>
       <div id="res-tip" class="res-tip"></div>
-      <button class="btn btn-reward" id="btn-double">▶ 広告を見て売上2倍（任意）</button>
       <div class="res-buttons">
         <button class="btn btn-primary" id="btn-retry">RETRY</button>
         <button class="btn btn-ghost" id="btn-title">TITLE</button>
@@ -80,17 +83,19 @@
 
   <div id="modal" class="modal hidden"><div class="modal-box" id="modal-box"></div></div>
 
-  <div id="ad-overlay" class="ad-overlay hidden">
-    <div class="ad-label">広告（テスト表示）</div>
-    <div class="ad-body">
-      <div class="ad-kind" id="ad-kind"></div>
-      <div class="ad-dummy">ここに AdMob 広告が表示されます</div>
-      <div class="ad-count" id="ad-count"></div>
+  <!-- リワード広告：摘発を「なかったこと」にする（アプリのみ・1 ゲーム 1 回） -->
+  <div id="redo" class="redo hidden">
+    <div class="redo-box">
+      <div class="redo-icon">🙈</div>
+      <button class="btn btn-reward" id="redo-watch">▶ 広告を見て もみ消す</button>
+      <button class="btn btn-ghost" id="redo-skip">結果へ</button>
     </div>
-    <button class="ad-close hidden" id="ad-close">✕ 閉じる</button>
   </div>
 </div>
 <script src="js/config.js"></script>
+<script src="js/ads-config.js"></script>
+<script src="js/build-info.js"></script>
+<script src="js/ads.js"></script>
 <script src="js/art.js"></script>
 <script src="js/game.js"></script>
 </body>

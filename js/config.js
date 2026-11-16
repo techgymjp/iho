@@ -46,6 +46,7 @@ window.CONFIG = Object.freeze({
   castToBoxSeconds: 0.5,        // キャストが客の隣に戻るまで
   policeInsideSeconds: 1.8,     // 警察が店内を見回る時間
   policeExitSeconds: 0.7,       // 帰っていく時間（出ていくまで油断禁止）
+  policeWalkSpeed: 120,         // キャストに歩み寄る速さ（たどり着く前に逃がせばセーフ）
   sleepyLookoutFactor: 0.6,     // 見張りが居眠り中は猶予が短くなる
   sleepyLookoutSeconds: 8,
   crackdownSeconds: 8,          // 取り締まり強化中は警察が早く来る
@@ -63,11 +64,4 @@ window.CONFIG = Object.freeze({
   bgmVolume: 0.5,
   bgmTempo: 88,
 
-  // --- 広告（Web版はダミー表示。ネイティブ化時に AdMob へ差し替え） ---
-  ads: {
-    enabled: true,
-    interstitialEveryNPlays: 1,
-    interstitialSeconds: 3,
-    rewardedSeconds: 5,
-  },
 });

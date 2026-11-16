@@ -328,3 +328,20 @@ button { font-family: var(--font); cursor: pointer; border: none; color: inherit
 .controls { min-height: calc(20 * var(--u)); background: none; }
 .hud { background: linear-gradient(180deg, rgba(40, 8, 60, 0.9), rgba(20, 6, 40, 0.85)); border-color: rgba(255, 150, 210, 0.6); box-shadow: 0 0 18px rgba(255, 60, 160, 0.35); }
 .mode { font-size: calc(13 * var(--u)); letter-spacing: -0.1em; }
+
+/* ---------- アプリ版（Android）：法的表記・もみ消し・バナーの余白 ---------- */
+.legal { position: absolute; left: 0; right: 0; bottom: calc(6 * var(--u)); text-align: center; font-size: calc(10 * var(--u)); color: #bbb; }
+.legal a { color: #ffd0ea; }
+.legal span { margin: 0 calc(4 * var(--u)); }
+body.native #screen-title { padding-bottom: calc(80 * var(--u)); }
+body.native .legal { bottom: calc(58 * var(--u)); }
+body.native #screen-result { padding-bottom: calc(64 * var(--u)); }
+body.native .modal { padding-bottom: calc(56 * var(--u)); }
+.redo { position: absolute; inset: 0; z-index: 30; display: flex; align-items: flex-end; justify-content: center; padding-bottom: calc(90 * var(--u)); background: rgba(0, 0, 0, 0.35); }
+.redo-box {
+  width: 84%; display: flex; flex-direction: column; gap: calc(8 * var(--u)); align-items: stretch; text-align: center;
+  padding: calc(14 * var(--u)); border-radius: calc(16 * var(--u)); background: rgba(20, 6, 40, 0.95); border: 2px solid #ffd54f;
+  box-shadow: 0 0 24px rgba(255, 213, 79, 0.5); animation: toastIn 0.25s ease-out;
+}
+.redo-icon { font-size: calc(40 * var(--u)); line-height: 1; }
+.redo .btn { font-size: calc(16 * var(--u)); }

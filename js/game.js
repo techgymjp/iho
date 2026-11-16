@@ -10,10 +10,21 @@
   const C = window.CONFIG;
   const W = 360, H = 640;              // 論理解像度（9:16）
   const TOTAL_MIN = C.gameHours * 60;
-  const params = new URLSearchParams(location.search);
-  const SPEED = clamp(parseFloat(params.get('speed')) || 1, 0.25, 20); // テスト用
-  const NO_ADS = params.get('noads') === '1';
-  const IS_NATIVE = !!(window.Capacitor && window.Capacitor.isNativePlatform && window.Capacitor.isNativePlatform());
+  let SPEED = 1, SEED = null;
+  // web-only:start
+  // テスト用の URL パラメータ（Web 版だけ。?speed=4 で倍速、?seed=123 でイベントを固定）
+  {
+    const q = new URLSearchParams(location.search);
+    SPEED = clamp(parseFloat(q.get('speed')) || 1, 0.25, 20);
+    if (q.get('seed') !== null) SEED = parseInt(q.get('seed'), 10) || 0;
+  }
+  // web-only:end
+  // Android アプリ（Capacitor）で動いているか。Web 版では Capacitor がないので何もしない
+  const NATIVE = !!(window.Capacitor && window.Capacitor.isNativePlatform && window.Capacitor.isNativePlatform());
+  const plugin = (name) => (NATIVE && window.Capacitor.Plugins ? window.Capacitor.Plugins[name] : null);
+  const Ads = window.Ads;
+  const REDO_MAX = 1;              // リワード広告の「もみ消し」は 1 ゲーム 1 回まで
+  const PLAY_URL = 'https://play.google.com/store/apps/details?id=jp.techgym.iho';
   const STORE = 'BAR 夜更し';
 
   // ---------------------------------------------------------------- utils
@@ -30,7 +41,7 @@
       return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
     };
   }
-  let rng = Math.random;                       // ?seed=123 で再現可能
+  let rng = Math.random;
   const rand = (a, b) => a + rng() * (b - a);
   const randInt = (a, b) => Math.floor(rand(a, b + 1));
   const pick = (arr) => arr[Math.floor(rng() * arr.length)];
@@ -103,6 +114,64 @@
     warn() { for (let i = 0; i < 3; i++) this.tone(220, 0.16, 'square', 0.06, i * 0.2); },
     siren() { for (let i = 0; i < 4; i++) this.tone(650, 0.42, 'sawtooth', 0.06, i * 0.45, 1050); },
     tick() { this.tone(1200, 0.03, 'square', 0.035); },
+    // ゲームオーバーの短い曲：トロンボーン風の「ワ・ワ・ワ・ワ〜ン」＋最後に暗い和音
+    gameOver(when = 0) {
+      if (!this.on || !this.ctx) return;
+      const a = this.ctx, t0 = a.currentTime + when;
+      const notes = [[55, 0, 0.42], [54, 0.45, 0.42], [53, 0.9, 0.42], [52, 1.35, 1.5]]; // G3 F#3 F3 E3
+      notes.forEach(([m, at, len], i) => {
+        const f = 440 * Math.pow(2, (m - 69) / 12), t = t0 + at;
+        const o = a.createOscillator(), o2 = a.createOscillator(); o.type = 'sawtooth'; o2.type = 'square';
+        o.frequency.setValueAtTime(f, t); o2.frequency.setValueAtTime(f / 2, t);
+        if (i === 3) { // 最後の音はビブラートで揺らす
+          const lfo = a.createOscillator(), lg = a.createGain(); lfo.frequency.value = 5.5; lg.gain.value = f * 0.025;
+          lfo.connect(lg); lg.connect(o.frequency); lg.connect(o2.frequency); lfo.start(t + 0.3); lfo.stop(t + len);
+        }
+        const fl = a.createBiquadFilter(); fl.type = 'lowpass'; fl.Q.value = 6; // ワウ（ミュート）
+        fl.frequency.setValueAtTime(300, t); fl.frequency.linearRampToValueAtTime(1400, t + 0.12); fl.frequency.linearRampToValueAtTime(600, t + len);
+        const g = a.createGain(); g.gain.setValueAtTime(0.0001, t); g.gain.exponentialRampToValueAtTime(0.13, t + 0.05);
+        g.gain.setValueAtTime(0.13, t + len - 0.12); g.gain.exponentialRampToValueAtTime(0.0001, t + len);
+        const g2 = a.createGain(); g2.gain.value = 0.35;
+        o.connect(fl); o2.connect(g2).connect(fl); fl.connect(g).connect(a.destination);
+        o.start(t); o2.start(t); o.stop(t + len + 0.05); o2.stop(t + len + 0.05);
+      });
+      // 最後にピアノで暗い和音（Cm）
+      [48, 51, 55, 60].forEach((m, i) => this.tone(440 * Math.pow(2, (m - 69) / 12), 1.8, 'triangle', 0.05, when + 3.0 + i * 0.03));
+    },
+    // 摘発の瞬間：映画館のような「ピーポーピーポー」（重低音の一撃＋エコー付きの2音サイレンが近づいてくる）
+    bustSiren() {
+      if (!this.on || !this.ctx) return;
+      const a = this.ctx, t0 = a.currentTime + 0.02;
+      // 響き（フィードバック付きディレイ）
+      const out = a.createGain(); out.gain.value = 1;
+      const delay = a.createDelay(1); delay.delayTime.value = 0.23;
+      const fb = a.createGain(); fb.gain.value = 0.38;
+      const wet = a.createGain(); wet.gain.value = 0.45;
+      const lp = a.createBiquadFilter(); lp.type = 'lowpass'; lp.frequency.value = 3200;
+      out.connect(lp); lp.connect(a.destination); lp.connect(delay); delay.connect(fb); fb.connect(delay); delay.connect(wet); wet.connect(a.destination);
+      // ドン！（重低音＋衝撃音）
+      const k = a.createOscillator(), kg = a.createGain();
+      k.frequency.setValueAtTime(110, t0); k.frequency.exponentialRampToValueAtTime(38, t0 + 0.6);
+      kg.gain.setValueAtTime(0.5, t0); kg.gain.exponentialRampToValueAtTime(0.0001, t0 + 0.9);
+      k.connect(kg).connect(out); k.start(t0); k.stop(t0 + 1);
+      this.noise(0.35, 0.35, 0.02, 300);
+      // ピーポー×4（高い音と低い音を交互に。近づいてくるように少しずつ大きく）
+      const HI = 960, LO = 770, len = 0.5, start = t0 + 0.25;
+      const g = a.createGain(); g.gain.setValueAtTime(0.0001, start);
+      g.gain.exponentialRampToValueAtTime(0.09, start + 0.15);
+      g.gain.linearRampToValueAtTime(0.16, start + len * 8 - 0.4);
+      g.gain.exponentialRampToValueAtTime(0.0001, start + len * 8 + 0.3);
+      g.connect(out);
+      const vib = a.createOscillator(), vibG = a.createGain(); vib.frequency.value = 6; vibG.gain.value = 6;
+      vib.connect(vibG); vib.start(start); vib.stop(start + len * 8 + 0.4);
+      [['square', 0], ['sawtooth', 4]].forEach(([type, det]) => {
+        const o = a.createOscillator(); o.type = type; o.detune.value = det;
+        for (let i = 0; i < 8; i++) o.frequency.setValueAtTime(i % 2 ? LO : HI, start + i * len);
+        vibG.connect(o.frequency);
+        const og = a.createGain(); og.gain.value = type === 'square' ? 0.5 : 0.35;
+        o.connect(og).connect(g); o.start(start); o.stop(start + len * 8 + 0.4);
+      });
+    },
     relief() { this.tone(400, 0.2, 'sine', 0.08, 0, 600); this.tone(600, 0.25, 'sine', 0.08, 0.18, 900); },
   };
 
@@ -204,31 +273,6 @@
     kick(t) { const o = Sound.ctx.createOscillator(); o.frequency.setValueAtTime(95, t); o.frequency.exponentialRampToValueAtTime(48, t + 0.12); this.env(o, t, 0.12, 0.005, 0.16); o.start(t); o.stop(t + 0.25); },
   };
 
-  // ---------------------------------------------------------------- ads（Web版はダミー。失敗してもゲーム継続）
-  const Ads = {
-    // Web版では広告を出さない。ネイティブアプリ（Android）で動いている時だけ有効。
-    available() { return C.ads.enabled && !NO_ADS && IS_NATIVE; },
-    showInterstitial() { return this.available() ? showAdOverlay('インタースティシャル広告', C.ads.interstitialSeconds, false).catch(() => false) : Promise.resolve(false); },
-    showRewarded() { return this.available() ? showAdOverlay('リワード広告', C.ads.rewardedSeconds, true).catch(() => false) : Promise.resolve(false); },
-  };
-  function showAdOverlay(kind, secs, rewarded) {
-    return new Promise((resolve) => {
-      const ov = $('ad-overlay'), close = $('ad-close'), count = $('ad-count');
-      $('ad-kind').textContent = kind;
-      ov.classList.remove('hidden'); close.classList.add('hidden');
-      let left = secs; count.textContent = left + '秒';
-      const done = (ok) => { clearInterval(iv); ov.classList.add('hidden'); close.onclick = null; resolve(ok); };
-      const iv = setInterval(() => {
-        left--;
-        if (left > 0) { count.textContent = left + '秒'; return; }
-        clearInterval(iv);
-        count.textContent = rewarded ? '報酬を獲得しました！' : '';
-        close.classList.remove('hidden'); close.onclick = () => done(true);
-      }, 1000);
-      if (rewarded) { close.classList.remove('hidden'); close.onclick = () => done(left <= 0); }
-    });
-  }
-
   // ---------------------------------------------------------------- data
   const CAST_ROSTER = window.Art.CASTS;
   const COLORS = ['#2b3a67', '#3a3a46', '#5a3e2b', '#4a4f5a', '#5b2a3a', '#2f4f4f', '#6b6b78', '#3d2f5a'];
@@ -252,8 +296,7 @@
   let G = null;
 
   function newGame() {
-    const seed = params.get('seed');
-    rng = seed !== null ? mulberry32(parseInt(seed, 10) || 0) : Math.random;
+    rng = SEED !== null ? mulberry32(SEED) : Math.random;
     G = {
       elapsed: 0, min: 0, sales: 0, customers: 0, heat: 0,
       seats: Array(C.seats).fill(null),   // 着席中の客
@@ -264,7 +307,7 @@
       inspAt: (C.inspectionHour + 24 - C.openingHour) * 60 + rand(-C.inspectionJitterMinutes, C.inspectionJitterMinutes),
       inspected: false, sleepyT: 0, crackdownT: 0, doorT: 0,
       events: scheduleEvents(),
-      stats: { passed: 0, drinks: 0, towers: 0, escapes: 0 },
+      stats: { passed: 0, drinks: 0, towers: 0, escapes: 0 }, redoUsed: 0, bustTimer: 0,
       outcome: null, paused: false, shake: 0, flash: 0, bustT: 0, caught: null,
     };
   }
@@ -288,7 +331,8 @@
   const castHome = (i) => ({ x: CAST_HOME[i], y: COUNTER_TOP + 8 });
 
   // 隣に座っている・隣へ移動中・逃げ切れていない＝警察に見られたらアウト
-  const castExposed = (c) => c && (c.state === 'box' || c.state === 'toBox' || c.state === 'toCounter');
+  // カウンターへ逃げる途中でも、半分（カウンターを飛び越えた）まで来ていればセーフ
+  const castExposed = (c) => !!c && (c.state === 'box' || c.state === 'toBox' || (c.state === 'toCounter' && c.t < 0.5));
   const settaiCount = () => G.casts.filter((c) => c && c.state === 'box').length;
   const policeInStore = () => !!G.visit;
 
@@ -336,6 +380,8 @@
       moveCast(c, 'counter'); G.stats.escapes++;
       burst('💨', castHome(c.i).x + 14, 270, 0.6);
     } else if (c.state === 'counter') {
+      // 警察が店内にいる間は、カウンターの中から出さない（うっかり2度押しで隣に戻って摘発されるのを防ぐ）
+      if (G.visit) { burst('🙅', castHome(c.i).x, 262, 0.7); Sound.tick(); return; }
       if (G.seats[c.i]) moveCast(c, 'box');
     }
   }
@@ -389,10 +435,12 @@
     G.alertT = 1.2;
     if (reason === 'raid') { burst('🚨', 180, 250, 2.0); Sound.siren(); }
   }
+  // 警察の動き：入店 → 店内を見回す → （客の隣のキャストを見つけたら）歩み寄る → 帰る
+  // 歩み寄られて聞き込みをされた時点でアウト。たどり着く前にカウンターの中へ逃がせばセーフ
   function updateVisit(dt) {
     const v = G.visit;
-    v.t -= dt;
     if (v.phase === 'enter') {
+      v.t -= dt;
       const e = easeInOut(clamp(1 - v.t / v.max, 0, 1));
       v.x = lerp(ENTRY.x, LOOK.x, e); v.y = lerp(ENTRY.y, LOOK.y, e);
       if (v.t > 0) return;
@@ -400,18 +448,43 @@
       burst(v.reason === 'inspection' ? '📋' : '🔦', v.x, v.y - 120, 1.0);
       Sound.siren();
     }
+    // 見回り中・帰る途中に、客の隣にいるキャストを見つけたら歩み寄る
     if (v.phase === 'look' || v.phase === 'exit') {
-      const caught = G.casts.find(castExposed);
-      if (caught) { bust(caught); return; }
+      const seen = G.casts.find(castExposed);
+      if (seen) {
+        v.resume = v.phase; v.phase = 'approach'; v.target = seen.i;
+        burst('❗', v.x, v.y - 120, 1.1); Sound.warn();
+      }
     }
-    if (v.phase === 'look' && v.t <= 0) {
-      v.phase = 'exit'; v.t = C.policeExitSeconds;
-      burst('🙆', G.visit.x, G.visit.y - 120, 1.0);
+    if (v.phase === 'approach') {
+      let c = G.casts[v.target];
+      if (!castExposed(c)) {
+        const other = G.casts.find(castExposed);
+        if (other) { v.target = other.i; c = other; }
+        else { // 逃げられた：見失って見回りに戻る
+          burst('❓', v.x, v.y - 120, 1.0);
+          v.phase = 'look'; v.t = Math.max(v.t, 0.9);
+          return;
+        }
+      }
+      const p = castPos(c), tx = p.x + 26, ty = SEAT_Y + 44;
+      const dx = tx - v.x, dy = ty - v.y, d = Math.hypot(dx, dy), step = C.policeWalkSpeed * dt;
+      if (d <= step + 2) { v.x = tx; v.y = ty; bust(c); return; }
+      v.x += (dx / d) * step; v.y += (dy / d) * step;
+      return;
+    }
+    if (v.phase === 'look') {
+      v.t -= dt;
+      if (v.t > 0) return;
+      v.phase = 'exit'; v.t = C.policeExitSeconds; v.from = { x: v.x, y: v.y };
+      burst('🙆', v.x, v.y - 120, 1.0);
       return;
     }
     if (v.phase === 'exit') {
+      v.t -= dt;
+      if (!v.from) v.from = { x: v.x, y: v.y };
       const e = easeInOut(clamp(1 - v.t / C.policeExitSeconds, 0, 1));
-      v.x = lerp(LOOK.x, ENTRY.x, e); v.y = lerp(LOOK.y, ENTRY.y, e);
+      v.x = lerp(v.from.x, ENTRY.x, e); v.y = lerp(v.from.y, ENTRY.y, e);
       if (v.t > 0) return;
       openDoor(0.4);
       G.stats.passed++;
@@ -432,8 +505,47 @@
     G.caught = { name: cast.name, pos: castPos(cast), from: { x: G.visit.x, y: G.visit.y } };
 
     Sound.warn();
-    setTimeout(() => { if (!G) return; Sound.siren(); G.shake = 0.6; G.flash = 1; }, 1500);
-    setTimeout(finish, 3300);
+    setTimeout(() => { if (!G) return; Sound.bustSiren(); G.shake = 0.6; G.flash = 1; }, 1500);
+    // 摘発の様子を見届けてから、リワード広告の「もみ消し」を提案する（アプリのみ・1 ゲーム 1 回）
+    if (Ads.canReward && G.redoUsed < REDO_MAX) G.bustTimer = setTimeout(showRedo, 3200);
+    else G.bustTimer = setTimeout(finish, 4200);
+  }
+
+  // ---------- リワード広告のチート：摘発を「なかったこと」にして営業を続ける
+  const REDO_WAIT = 6;
+  let redoTimer = 0, redoLeft = 0, redoBusy = false;
+  function showRedo() {
+    if (!G || state !== STATE.ending) return;
+    redoBusy = false; redoLeft = REDO_WAIT;
+    $('redo-watch').disabled = false; $('redo-watch').textContent = '▶ 広告を見て もみ消す';
+    $('redo-skip').textContent = `結果へ（${redoLeft}）`;
+    $('redo').classList.remove('hidden');
+    clearInterval(redoTimer);
+    redoTimer = setInterval(() => {
+      if (redoBusy) return;
+      redoLeft--; $('redo-skip').textContent = `結果へ（${redoLeft}）`;
+      if (redoLeft <= 0) closeRedo(true);
+    }, 1000);
+  }
+  function closeRedo(toResult) {
+    clearInterval(redoTimer); $('redo').classList.add('hidden');
+    if (toResult) finish();
+  }
+  async function watchRedo() {
+    if (redoBusy) return;
+    redoBusy = true; $('redo-watch').disabled = true; $('redo-watch').textContent = '読み込み中…';
+    const result = await Ads.showRewarded();
+    if (result !== 'rewarded') { closeRedo(true); return; }
+    closeRedo(false);
+    // 摘発をなかったことにして、そのまま営業を続ける
+    G.redoUsed++;
+    G.outcome = null; G.caught = null; G.visit = null; G.flash = 0; G.shake = 0;
+    G.casts.forEach((c) => { if (c) { c.state = 'counter'; c.t = 1; } });
+    G.heat = Math.min(G.heat, 30);
+    G.visitT = rand(...C.visitIntervalSeconds);
+    state = STATE.playing;
+    Music.start(); Music.tension(false);
+    burst('🙈', 180, 250, 2.2); for (let k = 0; k < 6; k++) burst('✨', 180 + (vrand() - 0.5) * 200, 250 + (vrand() - 0.5) * 100, 0.7);
   }
 
   // ---------- events
@@ -545,12 +657,14 @@
   }
   function finish() {
     if (state === STATE.result || !G) return;
+    clearTimeout(G.bustTimer);
     state = STATE.result;
     G.score = computeScore();
     const d = Storage.data;
     d.plays++; d.totalSales += G.sales;
     G.newBest = G.score.total > d.bestScore; if (G.newBest) d.bestScore = G.score.total;
     Storage.save();
+    if (G.outcome === 'bust') Sound.gameOver(0.8);
     showResult();
   }
 
@@ -608,11 +722,8 @@
     $('res-pass').textContent = G.stats.passed + '回';
     $('res-time').textContent = fmtTime(G.min) + 'まで';
     $('res-best').textContent = G.newBest ? '🏆 NEW BEST SCORE!' : `BEST ${yen(Storage.data.bestScore)}`;
-    $('res-breakdown').textContent = `お酒 ${G.stats.drinks}杯（タワー ${G.stats.towers}回） ・ キャストを逃がした ${G.stats.escapes}回`;
+    $('res-breakdown').textContent = `お酒 ${G.stats.drinks}杯（タワー ${G.stats.towers}回） ・ キャストを逃がした ${G.stats.escapes}回` + (G.redoUsed ? ` ・ もみ消し ${G.redoUsed}回` : '');
     $('res-tip').innerHTML = '<b>💡 現実では</b> 客の隣に座って談笑・お酌をするなどの「接待」をする営業には、風俗営業の許可が必要とされています。許可なく接待営業を行うことは法律で禁止されています。<small>※本作はフィクションです。説明は一般的な内容を簡略化したものです。</small>';
-    const dbl = $('btn-double');
-    dbl.classList.toggle('hidden', !Ads.available()); dbl.disabled = false; dbl.textContent = '▶ 広告を見て売上2倍（任意）';
-    G.doubled = false;
     showScreen('result');
   }
 
@@ -624,20 +735,27 @@
     burst('🍸', 180, 250, 1.8);
   }
   function goTitle() { state = STATE.title; G = null; renderTitle(); showScreen('title'); }
-  async function afterResult(next) {
-    Storage.data.sinceAd++;
-    if (Storage.data.sinceAd >= C.ads.interstitialEveryNPlays) {
-      Storage.data.sinceAd = 0; Storage.save();
-      try { await Ads.showInterstitial(); } catch (e) { /* 広告失敗でも継続 */ }
+  // ---------- 全画面広告（アプリのみ）：プレイ開始・トップへ戻る・ポーズからの再開・もう一度 のたびに出す
+  let adBusy = false;
+  async function withInterstitial(next) {
+    if (adBusy) return;
+    if (Ads.available) {
+      adBusy = true;
+      try { await Ads.showInterstitial(3000); } catch (e) { /* 広告が出なくても続ける */ }
+      adBusy = false;
     }
     next();
+  }
+  // バナー：タイトル・あそびかた・ポーズ・結果画面だけ（プレイ中は出さない）
+  function updateBanner() {
+    const playing = (state === STATE.playing && G && !G.paused) || state === STATE.ending;
+    Ads.setBanner(!playing && !adBusy);
   }
   function renderTitle() {
     const d = Storage.data;
     $('title-best').textContent = yen(d.bestScore);
     $('title-stats').textContent = d.plays ? `プレイ ${d.plays}回 ・ 累計売上 ${yen(d.totalSales)}` : '';
     $('btn-sound').textContent = d.sound ? '🔊 サウンド ON' : '🔇 サウンド OFF';
-    $('ad-banner').classList.toggle('hidden', !Ads.available());
   }
   function modal(html, buttons) {
     const box = $('modal-box');
@@ -682,52 +800,49 @@
     if (best) { tapCast(best); return; }
     for (let i = 0; i < C.seats; i++) {
       if (Math.abs(x - PAIR_X[i]) < 46 && y > SEAT_Y - 90 && y < SEAT_Y + 45) {
-        if (x < PAIR_X[i]) tapCustomer(i); else tapCast(G.casts[i]);
+        const c = G.casts[i];
+        if (x < PAIR_X[i]) tapCustomer(i);
+        else if (c && (c.state === 'box' || c.state === 'toBox')) tapCast(c); // 空いたスツールを押しても何もしない
         return;
       }
     }
   }
-  $('btn-pause').addEventListener('click', () => {
-    if (state !== STATE.playing || G.paused) return;
+  // ポーズ（ポーズ画面の「再開」「タイトルへ」でも全画面広告を出す）
+  function pause() {
+    if (state !== STATE.playing || !G || G.paused) return;
     G.paused = true;
     modal('<h2>一時停止中</h2>', [
-      { label: '再開', onClick: () => { G.paused = false; } },
-      { label: 'タイトルへ', cls: 'btn-ghost', onClick: () => { goTitle(); } },
+      { label: '再開', onClick: () => withInterstitial(() => { if (G) G.paused = false; }) },
+      { label: 'タイトルへ', cls: 'btn-ghost', onClick: () => withInterstitial(goTitle) },
     ]);
-  });
+  }
+  $('btn-pause').addEventListener('click', pause);
   $('btn-start').addEventListener('click', () => {
     Sound.init();
-    if (!Storage.data.tutorialDone) modal(HOWTO, [{ label: '開店！', onClick: () => { Storage.data.tutorialDone = true; Storage.save(); startGame(); } }]);
-    else startGame();
+    if (!Storage.data.tutorialDone) modal(HOWTO, [{ label: '開店！', onClick: () => { Storage.data.tutorialDone = true; Storage.save(); withInterstitial(startGame); } }]);
+    else withInterstitial(startGame);
   });
-  $('btn-howto').addEventListener('click', () => { Sound.init(); modal(HOWTO, [{ label: 'OK' }]); });
+  $('btn-howto').addEventListener('click', () => { Sound.init(); modal(HOWTO, [{ label: 'OK', onClick: () => withInterstitial(() => {}) }]); });
+  $('redo-watch').addEventListener('click', watchRedo);
+  $('redo-skip').addEventListener('click', () => { if (!redoBusy) closeRedo(true); });
   $('btn-sound').addEventListener('click', () => {
     Storage.data.sound = !Storage.data.sound; Storage.save();
     if (!Storage.data.sound) Music.stop(0.3);
     Sound.init(); Sound.door(); renderTitle();
   });
-  $('btn-retry').addEventListener('click', () => afterResult(startGame));
-  $('btn-title').addEventListener('click', () => afterResult(goTitle));
-  $('btn-double').addEventListener('click', async () => {
-    if (!G || G.doubled) return;
-    const btn = $('btn-double'); btn.disabled = true;
-    let ok = false; try { ok = await Ads.showRewarded(); } catch (e) { ok = false; }
-    if (ok) {
-      G.doubled = true; G.score.total *= 2;
-      const d = Storage.data; d.totalSales += G.sales;
-      if (G.score.total > d.bestScore) { d.bestScore = G.score.total; $('res-best').textContent = '🏆 NEW BEST SCORE!'; }
-      Storage.save();
-      btn.textContent = '✓ 売上2倍！'; $('res-sales').textContent = yen(G.score.total);
-    } else btn.disabled = false;
-  });
+  $('btn-retry').addEventListener('click', () => withInterstitial(startGame));
+  $('btn-title').addEventListener('click', () => withInterstitial(goTitle));
   $('btn-share').addEventListener('click', async () => {
     if (!G) return;
+    const redoTxt = G.redoUsed ? `・もみ消し${G.redoUsed}回` : '';
     const text = G.outcome === 'bust'
-      ? `【摘発カウントダウン】${fmtTime(G.min)}に摘発されました…売上${yen(G.score.total)} #摘発カウントダウン`
-      : `【摘発カウントダウン】朝まで逃げ切った！売上${yen(G.score.total)}・警察を${G.stats.passed}回やり過ごし・${G.score.rank}ランク #摘発カウントダウン`;
-    const url = location.href.split('?')[0];
+      ? `【摘発カウントダウン】${fmtTime(G.min)}に摘発されました…売上${yen(G.score.total)}${redoTxt} #摘発カウントダウン`
+      : `【摘発カウントダウン】朝まで逃げ切った！売上${yen(G.score.total)}・警察を${G.stats.passed}回やり過ごし${redoTxt}・${G.score.rank}ランク #摘発カウントダウン`;
+    const url = NATIVE ? PLAY_URL : location.href.split('?')[0];
+    const nativeShare = plugin('Share');
     try {
-      if (navigator.share) await navigator.share({ text, url });
+      if (nativeShare) await nativeShare.share({ title: '摘発カウントダウン', text, url, dialogTitle: '結果をシェア' });
+      else if (navigator.share) await navigator.share({ text, url });
       else { await navigator.clipboard.writeText(text + ' ' + url); const b = $('btn-share'); b.textContent = 'コピーしました'; setTimeout(() => { b.textContent = '結果をシェア'; }, 1500); }
     } catch (e) { /* キャンセル */ }
   });
@@ -736,12 +851,35 @@
     if (['1', '2', '3'].includes(e.key)) tapCast(G.casts[+e.key - 1]);
     else if (['q', 'w', 'e'].includes(e.key)) tapCustomer('qwe'.indexOf(e.key));
   });
+  // 裏に回ったら一時停止して音を止める（広告の表示中は広告側が音を止めている）
   document.addEventListener('visibilitychange', () => {
-    if (Sound.ctx) { if (document.hidden) Sound.ctx.suspend(); else Sound.ctx.resume(); }
-    if (document.hidden && state === STATE.playing && G && !G.paused) {
-      G.paused = true; modal('<h2>一時停止中</h2>', [{ label: '再開', onClick: () => { G.paused = false; } }]);
-    }
+    if (Sound.ctx) { if (document.hidden) Sound.ctx.suspend(); else if (!Ads.showing) Sound.ctx.resume(); }
+    if (document.hidden) pause();
   });
+  Ads.setAudioHooks({
+    suspend: () => { if (Sound.ctx) Sound.ctx.suspend(); },
+    resume: () => { if (Sound.ctx && !document.hidden) Sound.ctx.resume(); },
+  });
+  // Android の戻るボタン：プレイ中はポーズ（ポーズ中なら再開）、タイトル・結果画面ではアプリを閉じる
+  if (plugin('App')) {
+    plugin('App').addListener('backButton', () => {
+      if (!$('modal').classList.contains('hidden')) {
+        const btns = $('modal-box').querySelectorAll('[data-i]');
+        if (btns.length) btns[0].click(); // ポーズ中なら「再開」、あそびかたなら「OK」
+        return;
+      }
+      if (state === STATE.title || state === STATE.result) plugin('App').exitApp();
+      else if (state === STATE.playing) pause();
+    });
+  }
+  // タイトル画面の下に、バージョン・プライバシーポリシー・広告の設定（EU など）を出す（アプリのみ）
+  if (NATIVE) {
+    $('legal').classList.remove('hidden');
+    document.body.classList.add('native');
+    if (window.APP_VERSION && window.APP_VERSION !== 'dev') $('build-info').textContent = window.APP_VERSION;
+    Ads.initDone.then(() => { if (Ads.privacyOptionsRequired) $('ad-privacy').classList.remove('hidden'); });
+    $('ad-privacy-link').addEventListener('click', (e) => { e.preventDefault(); Ads.showPrivacyOptions(); });
+  }
 
   // ---------------------------------------------------------------- rendering
   const app = $('app');
@@ -908,8 +1046,8 @@
   }
   function drawQuestioning() {
     const p = G.caught.pos, f = G.caught.from;
-    const t = clamp(G.bustT / 0.7, 0, 1), e = easeInOut(t);
-    const tx = p.x + 30, ty = Math.max(p.y + 6, SEAT_Y + 40);
+    const t = clamp(G.bustT / 0.3, 0, 1), e = easeInOut(t);
+    const tx = p.x + 26, ty = SEAT_Y + 44;
     const x = lerp(f.x, tx, e), y = lerp(f.y, ty, e);
     drawStanding(ENTRY.x + 4, ENTRY.y + 6, POLICE);
     drawStanding(x, y, POLICE, { walking: t < 1, phase: T * 12 });
@@ -1077,6 +1215,7 @@
     try {
       update(realDt * SPEED);
       if (state === STATE.playing) updateHUD();
+      updateBanner();
       render(realDt);
     } catch (e) { console.error(e); }
     requestAnimationFrame(frame);
@@ -1087,6 +1226,8 @@
   Storage.load(); resize(); buildBG(); renderTitle();
   requestAnimationFrame(frame);
 
-  // テスト用フック
-  window.__game = { get state() { return state; }, get G() { return G; }, tapCast, tapCustomer, startGame, Music };
+  // web-only:start
+  // テスト・撮影用のフック（Web 版だけ。アプリ用のビルドでは取り除く）
+  window.__game = { get state() { return state; }, get G() { return G; }, tapCast, tapCustomer, startGame, Music, showRedo };
+  // web-only:end
 })();

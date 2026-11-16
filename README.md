@@ -21,7 +21,7 @@ PC では 1〜3＝キャスト、Q/W/E＝お酒。
 
 ## 構成
 ```
-index.html            画面（タイトル／ゲーム／立入調査・是正／結果）
+index.html            画面（タイトル／ゲーム／結果）
 css/style.css         ネオン調UI（9:16、セーフエリア対応、縦長端末は9:21まで拡張）
 js/config.js          調整値を集約（時間・来客・売上・イベント・スコア・広告）
 js/game.js            ゲーム本体（状態遷移・時間・来客・イベント・描画・保存・広告ダミー）
@@ -40,8 +40,28 @@ python3 -m http.server 8000
 ## GitHub Pages
 Settings → Pages → Source を「Deploy from a branch」、Branch を `main` / `(root)` に設定。
 
-## 広告（AdMob）
-Web版（GitHub Pages）では広告を表示しません。`js/game.js` の `Ads` はネイティブアプリとして動作している時だけ有効になります。
+## Android アプリ
+- パッケージ名：`jp.techgym.iho`／アプリ名：摘発カウントダウン（英語：Raid Countdown）
+- 構成：Capacitor 8（`@capacitor/app`・`@capacitor/share`・`@capacitor-community/admob`）。ゲームのファイルはアプリに同梱（オフラインで遊べる）
+- 動作確認用 APK（デバッグ署名・テスト広告）：
+  - リリース画面：https://github.com/techgymjp/iho/releases/tag/android-latest
+  - APK 直接：https://github.com/techgymjp/iho/releases/latest/download/iho.apk
+- ビルドは GitHub Actions（`.github/workflows/android.yml`）。`main` への push で APK を作って上の Release に載せる。
+  GitHub Secrets（`ANDROID_KEYSTORE_BASE64` など 4 つ）を登録すると、Google Play 用の署名付き AAB（本番広告）も Artifact に作られる
+- 広告（`js/ads.js`）：アプリのときだけ動く。Web 版では出さない
+  - バナー：タイトル・あそびかた・ポーズ・結果画面の下中央
+  - 全画面広告：プレイ開始・トップへ戻る・ポーズからの再開・もう一度 のたびに
+  - リワード：摘発されたとき「広告を見て もみ消す」で、摘発をなかったことにして営業を続ける（1 ゲーム 1 回）
+  - 本番の広告ユニット ID は未設定（届いたら `js/ads.js` の `production` と `android/app/src/main/res/values/strings.xml` の `admob_app_id` に入れる）
+- ローカルでのビルド：
+  ```bash
+  npm ci
+  npm run android:sync   # www/ を作って android/ にコピー（テスト広告）
+  npm run android:open   # Android Studio で開く
+  ```
 
 ## 保存データ（localStorage）
 ベストスコア（最高売上）、総プレイ回数、累計売上、サウンド設定、チュートリアル完了。
+
+## ライセンス
+著作権はテックジム株式会社に帰属します（All rights reserved）。許可なく複製・改変・再配布すること、Web サイトやアプリとして公開・販売すること、名前・ロゴ・アイコン・画像を使うことを禁止します。テックジムの受講生が学習目的で複製・改変することは許可しますが、アプリストアでの公開・広告の掲載・販売などの商用利用は禁止です。詳しくは `LICENSE` を見てください。
