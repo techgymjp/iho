@@ -24,7 +24,7 @@
   const plugin = (name) => (NATIVE && window.Capacitor.Plugins ? window.Capacitor.Plugins[name] : null);
   const Ads = window.Ads;
   const REDO_MAX = 1;              // リワード広告の「もみ消し」は 1 ゲーム 1 回まで
-  const PLAY_URL = 'https://play.google.com/store/apps/details?id=jp.techgym.iho';
+  const SHARE_URL = 'https://techgym.jp/column/claude-code-game-iho/';   // シェアするページ（Web 版・アプリ共通）
   const STORE = 'BAR 夜更し';
 
   // ---------------------------------------------------------------- utils
@@ -304,8 +304,9 @@
       walkers: [], popups: [], particles: [], fx: [], alertT: 0, heatFlash: 0,
       spawnT: 0.6, buzzLeft: 0, vipNext: 0, vipCount: 0,
       visit: null, visitT: rand(...C.visitIntervalSeconds),
-      inspAt: (C.inspectionHour + 24 - C.openingHour) * 60 + rand(-C.inspectionJitterMinutes, C.inspectionJitterMinutes),
-      inspected: false, sleepyT: 0, crackdownT: 0, doorT: 0,
+      // 立入調査の予定（ゲーム内の経過分）
+      insps: C.inspectionHours.map((h) => ((h + 24 - C.openingHour) % 24) * 60 + rand(-C.inspectionJitterMinutes, C.inspectionJitterMinutes)).sort((a, b) => a - b),
+      sleepyT: 0, crackdownT: 0, doorT: 0,
       events: scheduleEvents(),
       stats: { passed: 0, drinks: 0, towers: 0, escapes: 0 }, redoUsed: 0, bustTimer: 0,
       outcome: null, paused: false, shake: 0, flash: 0, bustT: 0, caught: null,
@@ -426,7 +427,7 @@
 
   // ---------- 警察（ドアの開く音で入ってくる）
   function startVisit(reason) {
-    let enter = reason === 'raid' ? C.raidWarningSeconds : lerp(C.warningSecondsSafe, C.warningSecondsHot, G.heat / 100);
+    let enter = reason === 'raid' ? C.raidWarningSeconds : lerp(C.warningSecondsSafe, C.warningSecondsHot, G.heat / 100) * lerp(1, C.lateWarningFactor, late());
     if (G.sleepyT > 0) enter *= C.sleepyLookoutFactor;
     G.visit = { reason, phase: 'enter', t: enter, max: enter, x: ENTRY.x, y: ENTRY.y };
     Music.tension(true);
@@ -437,6 +438,8 @@
   }
   // 警察の動き：入店 → 店内を見回す → （客の隣のキャストを見つけたら）歩み寄る → 帰る
   // 歩み寄られて聞き込みをされた時点でアウト。たどり着く前にカウンターの中へ逃がせばセーフ
+  // 夜の進み具合（0＝開店 〜 1＝閉店）。遅い時間ほど警察が厳しくなる
+  const late = () => clamp(G.elapsed / C.gameDurationSeconds, 0, 1);
   function updateVisit(dt) {
     const v = G.visit;
     if (v.phase === 'enter') {
@@ -468,7 +471,7 @@
         }
       }
       const p = castPos(c), tx = p.x + 26, ty = SEAT_Y + 44;
-      const dx = tx - v.x, dy = ty - v.y, d = Math.hypot(dx, dy), step = C.policeWalkSpeed * dt;
+      const dx = tx - v.x, dy = ty - v.y, d = Math.hypot(dx, dy), step = C.policeWalkSpeed * lerp(1, C.lateWalkFactor, late()) * dt;
       if (d <= step + 2) { v.x = tx; v.y = ty; bust(c); return; }
       v.x += (dx / d) * step; v.y += (dy / d) * step;
       return;
@@ -493,7 +496,7 @@
       burst('🆗', 180, 250, 1.6); for (let k = 0; k < 8; k++) burst('✨', 180 + (vrand() - 0.5) * 200, 250 + (vrand() - 0.5) * 100, 0.7);
       G.visit = null; Music.tension(false);
       const k = lerp(1, C.visitIntervalAtMaxHeat, G.heat / 100) * (G.crackdownT > 0 ? 0.5 : 1);
-      G.visitT = rand(...C.visitIntervalSeconds) * k;
+      G.visitT = rand(...C.visitIntervalSeconds) * k * lerp(1, C.lateIntervalFactor, late());
       G.spawnT = Math.min(G.spawnT, 0.8);
     }
   }
@@ -623,7 +626,7 @@
 
     // 警察
     if (G.visit) updateVisit(dt);
-    else if (!G.inspected && G.min >= G.inspAt) { G.inspected = true; startVisit('inspection'); }
+    else if (G.insps.length && G.min >= G.insps[0]) { G.insps.shift(); startVisit('inspection'); }
     else if (G.heat >= 100) startVisit('raid');
     else if ((G.visitT -= dt) <= 0) startVisit('patrol');
   }
@@ -767,13 +770,13 @@
   }
   const HOWTO = `
     <h2>遊び方</h2>
-    <p>あなたは「${STORE}」のオーナー。表向きはただのバーだけど、実は<b>女性キャストがカウンター席でお客さんの隣に座って接客</b>している（もちろん無許可）。<b>22:00〜翌5:00（45秒）</b>、摘発されずに稼ぎ切れ！</p>
+    <p>あなたは「${STORE}」のオーナー。表向きはただのバーだけど、実は<b>女性キャストがカウンター席でお客さんの隣に座って接客</b>している（もちろん無許可）。<b>22:00〜翌5:00（${C.gameDurationSeconds}秒）</b>、摘発されずに稼ぎ切れ！</p>
     <ul class="howto">
       <li><b>🚪 来店</b>：お客さんはキャストと同伴でやって来て、カウンターに並んで座る。</li>
       <li><b>👆 お客さんをタップ</b>：お酒が出る。飲み終わったら、またタップでおかわり！ ビール→ハイボール→ワイン→シャンパン→タワーと単価UP。</li>
       <li><b>🔔 ドアの開く音に注意</b>：お客さんも警察も同じ音で入ってくる。<b>👮警察だったら、隣のキャストをタップしてカウンターの中へ逃がせ！</b></li>
       <li>警察がキャストに聞き込みをしたらその時点でアウト（摘発）。警察が出ていくまで油断禁止。</li>
-      <li>警察が帰ったら、カウンターの中のキャストをタップしてまた隣へ。お酒や接待で「疑惑」が溜まると警察が来やすくなり、MAXで踏み込まれる！ 3時ごろの立入調査は必ず来る。</li>
+      <li>警察が帰ったら、カウンターの中のキャストをタップしてまた隣へ。お酒や接待で「疑惑」が溜まると警察が来やすくなり、MAXで踏み込まれる！ 0時ごろと3時ごろの立入調査は必ず来る。夜が更けるほど警察は厳しくなる！</li>
     </ul>
     <p class="small">※本作はフィクションです。現実の無許可営業は法律で禁止されています。</p>`;
 
@@ -838,7 +841,7 @@
     const text = G.outcome === 'bust'
       ? `【摘発カウントダウン】${fmtTime(G.min)}に摘発されました…売上${yen(G.score.total)}${redoTxt} #摘発カウントダウン`
       : `【摘発カウントダウン】朝まで逃げ切った！売上${yen(G.score.total)}・警察を${G.stats.passed}回やり過ごし${redoTxt}・${G.score.rank}ランク #摘発カウントダウン`;
-    const url = NATIVE ? PLAY_URL : location.href.split('?')[0];
+    const url = SHARE_URL;
     const nativeShare = plugin('Share');
     try {
       if (nativeShare) await nativeShare.share({ title: '摘発カウントダウン', text, url, dialogTitle: '結果をシェア' });
