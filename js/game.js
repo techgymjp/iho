@@ -769,17 +769,17 @@
       $('modal').classList.add('hidden'); Sound.tick(); const f = buttons[+el.dataset.i].onClick; if (f) f();
     }));
   }
+  const PLAY_TIME = C.gameDurationSeconds % 60 === 0 ? `${C.gameDurationSeconds / 60}分` : `${C.gameDurationSeconds}秒`;
   const HOWTO = `
     <h2>遊び方</h2>
-    <p>あなたは「${STORE}」のオーナー。表向きはただのバーだけど、実は<b>女性キャストがカウンター席でお客さんの隣に座って接客</b>している（もちろん無許可）。<b>22:00〜翌5:00（3分）</b>、摘発されずに稼ぎ切れ！</p>
-    <ul class="howto">
-      <li><b>🚪 来店</b>：お客さんはキャストと同伴でやって来て、カウンターに並んで座る。</li>
-      <li><b>👆 お客さんをタップ</b>：お酒が出る。飲み終わったら、またタップでおかわり！ ビール→ハイボール→ワイン→シャンパン→タワーと単価UP。</li>
-      <li><b>🔔 ドアの開く音に注意</b>：お客さんも警察も同じ音で入ってくる。<b>👮警察だったら、隣のキャストをタップしてカウンターの中へ逃がせ！</b></li>
-      <li>警察がキャストに聞き込みをしたらその時点でアウト（摘発）。警察が出ていくまで油断禁止。</li>
-      <li>警察が帰ったら、カウンターの中のキャストをタップしてまた隣へ。お酒や接待で「疑惑」が溜まると警察が来やすくなり、MAXで踏み込まれる！ 0時・2時・4時ごろの立入調査は必ず来る。夜が更けるほど警察は厳しくなる！</li>
-    </ul>
-    <p class="small">※本作はフィクションです。現実の無許可営業は法律で禁止されています。</p>`;
+    <p class="howto-lead">朝5時まで<b>${PLAY_TIME}</b>、<br>摘発されずに稼げ！</p>
+    <div class="howto">
+      <div><span>👆</span><p><b>客をタップ</b><br>お酒で売上UP</p></div>
+      <div><span>🔔</span><p><b>ドアの音</b>に注意<br>👮警察かも！</p></div>
+      <div><span>💃</span><p><b>キャストをタップ</b><br>カウンターへ逃がす</p></div>
+      <div><span>🚨</span><p>聞き込みされたら<br><b>摘発！</b></p></div>
+    </div>
+    <p class="small">※フィクションです。無許可営業は法律で禁止されています。</p>`;
 
   // ---------------------------------------------------------------- input
   const canvas = $('scene'), ctx = canvas.getContext('2d');
