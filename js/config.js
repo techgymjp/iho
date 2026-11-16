@@ -62,6 +62,10 @@ window.CONFIG = Object.freeze({
   survivalScore: 30,            // 朝まで摘発されなければ30点
   ranks: [['S', 90], ['A', 80], ['B', 65], ['C', 50], ['D', 0]],
 
+  // --- BGM（ナイトバー風ジャズ） ---
+  bgmVolume: 0.5,
+  bgmTempo: 88,
+
   // --- 広告（Web版はダミー表示。ネイティブ化時に AdMob へ差し替え） ---
   ads: {
     enabled: true,

@@ -50,6 +50,12 @@
     init() {
       if (!this.ctx) { try { this.ctx = new (window.AudioContext || window.webkitAudioContext)(); } catch (e) { this.ctx = null; } }
       if (this.ctx && this.ctx.state === 'suspended') this.ctx.resume();
+      if (this.ctx && this.on && !document.hidden) Music.start();
+    },
+    ensureNoise() {
+      if (this.noiseBuf || !this.ctx) return;
+      const n = this.ctx.sampleRate; this.noiseBuf = this.ctx.createBuffer(1, n, n);
+      const d = this.noiseBuf.getChannelData(0); for (let i = 0; i < n; i++) d[i] = Math.random() * 2 - 1;
     },
     tone(freq, dur, type = 'sine', vol = 0.12, when = 0, slideTo = null) {
       if (!this.on || !this.ctx) return;
@@ -62,21 +68,28 @@
     },
     noise(dur, vol, when = 0, freq = 800) {
       if (!this.on || !this.ctx) return;
-      if (!this.noiseBuf) {
-        const n = this.ctx.sampleRate; this.noiseBuf = this.ctx.createBuffer(1, n, n);
-        const d = this.noiseBuf.getChannelData(0); for (let i = 0; i < n; i++) d[i] = Math.random() * 2 - 1;
-      }
+      this.ensureNoise();
       const t = this.ctx.currentTime + when;
       const src = this.ctx.createBufferSource(), f = this.ctx.createBiquadFilter(), g = this.ctx.createGain();
       src.buffer = this.noiseBuf; f.type = 'bandpass'; f.frequency.value = freq; f.Q.value = 1.2;
       g.gain.setValueAtTime(vol, t); g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
       src.connect(f).connect(g).connect(this.ctx.destination); src.start(t); src.stop(t + dur + 0.05);
     },
-    // ドアが開く音（ガチャ…カランコロン）— お客さんも警察も同じ音
+    // 金属ベルの一打（非整数倍音で「カーン」という響き）
+    bellStrike(freq, when, dur, vol) {
+      [[1, 1], [2.76, 0.45], [5.4, 0.22], [8.93, 0.1]].forEach(([r, v], i) => {
+        this.tone(freq * r * (1 + (Math.random() - 0.5) * 0.004), dur / (1 + i * 0.8), 'sine', vol * v, when);
+      });
+      this.noise(0.015, vol * 0.6, when, freq * 3); // 打撃のアタック
+    },
+    // ドアチャイム「カランコロン」— お客さんも警察も同じ音
     door() {
-      this.noise(0.06, 0.25, 0, 1800);            // ガチャ
-      this.tone(220, 0.35, 'sawtooth', 0.025, 0.04, 160); // ギィ…
-      [1760, 1318, 1568, 1175].forEach((f, i) => this.tone(f, 0.35, 'sine', 0.06, 0.12 + i * 0.09)); // カランコロン
+      this.noise(0.04, 0.12, 0, 1500);              // ドアノブ（カチャ）
+      this.bellStrike(1980, 0.05, 0.25, 0.07);      // カ
+      this.bellStrike(1760, 0.12, 0.7, 0.08);       // ラン
+      this.bellStrike(1480, 0.34, 0.25, 0.07);      // コ
+      this.bellStrike(1245, 0.41, 0.9, 0.08);       // ロン
+      this.bellStrike(1760, 0.62, 0.5, 0.025);      // 余韻の揺れ
     },
     steps() { for (let i = 0; i < 3; i++) this.noise(0.08, 0.35, 0.35 + i * 0.22, 220); },
     coin(p = 0) { this.tone(988 + p * 120, 0.06, 'square', 0.05); this.tone(1319 + p * 160, 0.14, 'square', 0.05, 0.05); },
@@ -90,6 +103,104 @@
     siren() { for (let i = 0; i < 4; i++) this.tone(650, 0.42, 'sawtooth', 0.06, i * 0.45, 1050); },
     tick() { this.tone(1200, 0.03, 'square', 0.035); },
     relief() { this.tone(400, 0.2, 'sine', 0.08, 0, 600); this.tone(600, 0.25, 'sine', 0.08, 0.18, 900); },
+  };
+
+
+  // ---------------------------------------------------------------- BGM（ナイトバー風ジャズをリアルタイム合成）
+  // ウォーキングベース＋エレピのコンピング＋ブラシ/ライド＋時々ビブラフォン。スウィングの8小節ループ。
+  const Music = {
+    playing: false, nextTime: 0, step: 0, timer: null, out: null, filter: null,
+    // 8小節：Dm9 | G13 | Cmaj9 | A7(b9) | Em9 | A13 | Dm9 | G7(alt)
+    PROG: [
+      { root: 38, v: [53, 57, 60, 64] }, { root: 43, v: [53, 59, 64, 69] },
+      { root: 36, v: [52, 55, 59, 62] }, { root: 45, v: [55, 58, 61, 64] },
+      { root: 40, v: [55, 59, 62, 66] }, { root: 45, v: [55, 61, 66, 69] },
+      { root: 38, v: [53, 57, 60, 64] }, { root: 43, v: [53, 59, 63, 68] },
+    ],
+    COMP: [[3, 6], [2, 5], [3], [1, 4, 7], [0, 3], [3, 7]],
+    start() {
+      const a = Sound.ctx;
+      if (!a || !Sound.on || this.playing) return;
+      this.out = a.createGain(); this.out.gain.value = 0;
+      this.filter = a.createBiquadFilter(); this.filter.type = 'lowpass'; this.filter.frequency.value = 12000;
+      this.out.connect(this.filter).connect(a.destination);
+      this.out.gain.linearRampToValueAtTime(C.bgmVolume, a.currentTime + 1.5);
+      this.playing = true; this.step = 0; this.nextTime = a.currentTime + 0.15; this.walk = null;
+      this.timer = setInterval(() => this.tick(), 40);
+    },
+    stop(fade = 0.6) {
+      if (!this.playing) return;
+      const a = Sound.ctx, o = this.out, f = this.filter;
+      o.gain.cancelScheduledValues(a.currentTime); o.gain.setValueAtTime(o.gain.value, a.currentTime);
+      o.gain.linearRampToValueAtTime(0, a.currentTime + fade);
+      clearInterval(this.timer); this.playing = false;
+      setTimeout(() => { try { o.disconnect(); f.disconnect(); } catch (e) { /* noop */ } }, fade * 1000 + 400);
+    },
+    // 警察が店内にいる間は音がこもって小さくなる
+    tension(on) {
+      if (!this.playing) return;
+      const t = Sound.ctx.currentTime;
+      this.filter.frequency.setTargetAtTime(on ? 450 : 12000, t, 0.12);
+      this.out.gain.setTargetAtTime(on ? C.bgmVolume * 0.55 : C.bgmVolume, t, 0.2);
+    },
+    tick() {
+      const a = Sound.ctx; if (!a) return;
+      if (this.nextTime < a.currentTime - 0.1) this.nextTime = a.currentTime + 0.05; // タブ復帰時の取りこぼし対策
+      const beat = 60 / C.bgmTempo;
+      while (this.nextTime < a.currentTime + 0.25) {
+        this.schedule(this.step, this.nextTime);
+        this.nextTime += this.step % 2 === 0 ? beat * 2 / 3 : beat / 3; // スウィング
+        this.step++;
+      }
+    },
+    schedule(step, t) {
+      const bar = Math.floor(step / 8) % 8, pos = step % 8, onBeat = pos % 2 === 0, beatNo = pos >> 1;
+      const ch = this.PROG[bar], next = this.PROG[(bar + 1) % 8];
+      if (pos === 0) { // 小節ごとにウォーキングラインとコンプのリズムを決める
+        const r = ch.root, third = ch.v[0] % 12 === (r + 3) % 12 ? 3 : 4;
+        const approach = next.root + (Math.random() < 0.5 ? -1 : 1);
+        this.walk = [r, r + (Math.random() < 0.5 ? 7 : third), r + (Math.random() < 0.5 ? 12 : 10), approach];
+        this.comp = this.COMP[Math.floor(Math.random() * this.COMP.length)];
+      }
+      if (onBeat) this.bass(this.walk[beatNo], t);
+      // ライド：チーン、チーン・カ、チーン、チーン・カ
+      if (onBeat) this.ride(t, 0.05); else if (pos === 3 || pos === 7) this.ride(t, 0.032);
+      // ハイハット（2・4拍）とブラシ
+      if (pos === 2 || pos === 6) { this.hat(t); this.brush(t); }
+      if (pos === 0 && Math.random() < 0.6) this.kick(t);
+      if (this.comp.includes(pos)) this.epiano(ch.v, t, onBeat ? 0.9 : 0.6);
+      if (Math.random() < 0.16 && bar % 2 === 1) this.vibe(ch.v[Math.floor(Math.random() * 4)] + 12, t);
+    },
+    f(m) { return 440 * Math.pow(2, (m - 69) / 12); },
+    env(node, t, vol, a, d) {
+      const g = Sound.ctx.createGain();
+      g.gain.setValueAtTime(0.0001, t); g.gain.exponentialRampToValueAtTime(vol, t + a); g.gain.exponentialRampToValueAtTime(0.0001, t + a + d);
+      node.connect(g).connect(this.out); return g;
+    },
+    osc(type, freq, t, vol, a, d) {
+      const o = Sound.ctx.createOscillator(); o.type = type; o.frequency.setValueAtTime(freq, t);
+      this.env(o, t, vol, a, d); o.start(t); o.stop(t + a + d + 0.05); return o;
+    },
+    noise(t, vol, d, type, freq) {
+      const a = Sound.ctx; Sound.ensureNoise();
+      const src = a.createBufferSource(); src.buffer = Sound.noiseBuf;
+      const fl = a.createBiquadFilter(); fl.type = type; fl.frequency.value = freq;
+      src.connect(fl); this.env(fl, t, vol, 0.003, d);
+      src.start(t, Math.random() * 0.5); src.stop(t + d + 0.05);
+    },
+    bass(m, t) { const fr = this.f(m); this.osc('sine', fr, t, 0.32, 0.01, 0.55); this.osc('triangle', fr, t, 0.12, 0.005, 0.25); },
+    epiano(notes, t, len) {
+      notes.forEach((m, i) => {
+        const fr = this.f(m), tt = t + i * 0.008;
+        this.osc('sine', fr, tt, 0.045, 0.015, len + 0.6);
+        this.osc('sine', fr * 2, tt, 0.012, 0.005, 0.35); // ベルっぽい倍音
+      });
+    },
+    vibe(m, t) { const fr = this.f(m); this.osc('sine', fr, t, 0.06, 0.005, 1.3); this.osc('sine', fr * 4, t, 0.008, 0.002, 0.2); },
+    ride(t, vol) { this.noise(t, vol, 0.28, 'highpass', 6500); this.osc('sine', 5400 + Math.random() * 200, t, vol * 0.15, 0.002, 0.3); },
+    hat(t) { this.noise(t, 0.04, 0.05, 'highpass', 8000); },
+    brush(t) { this.noise(t, 0.035, 0.18, 'bandpass', 2800); },
+    kick(t) { const o = Sound.ctx.createOscillator(); o.frequency.setValueAtTime(95, t); o.frequency.exponentialRampToValueAtTime(48, t + 0.12); this.env(o, t, 0.12, 0.005, 0.16); o.start(t); o.stop(t + 0.25); },
   };
 
   // ---------------------------------------------------------------- ads（Web版はダミー。失敗してもゲーム継続）
@@ -276,6 +387,7 @@
     let enter = reason === 'raid' ? C.raidWarningSeconds : lerp(C.warningSecondsSafe, C.warningSecondsHot, G.heat / 100);
     if (G.sleepyT > 0) enter *= C.sleepyLookoutFactor;
     G.visit = { reason, phase: 'enter', t: enter, max: enter, x: ENTRY.x, y: ENTRY.y };
+    Music.tension(true);
     openDoor(enter + 0.2);
     Sound.steps();
     if (reason === 'raid') { toast('🚨 警察だ！ 全員動くな！', 'red'); Sound.siren(); }
@@ -309,7 +421,7 @@
       G.heat = clamp(G.heat + C.heatAfterPassedVisit, 0, 100);
       Sound.relief();
       msg('🚪 警察が帰った！ キャストをタップしてまた隣へ', '#ff9ccc');
-      G.visit = null;
+      G.visit = null; Music.tension(false);
       const k = lerp(1, C.visitIntervalAtMaxHeat, G.heat / 100) * (G.crackdownT > 0 ? 0.5 : 1);
       G.visitT = rand(...C.visitIntervalSeconds) * k;
       G.spawnT = Math.min(G.spawnT, 0.8);
@@ -319,6 +431,7 @@
   // 警察がキャストに聞き込みをした時点でアウト
   function bust(cast) {
     G.outcome = 'bust'; state = STATE.ending; G.bustT = 0;
+    Music.stop(0.25);
     G.caught = { name: cast.name, pos: castPos(cast), from: { x: G.visit.x, y: G.visit.y } };
     toast('👮「…ん？ そこのお姉さん、ちょっといいですか？」', 'blue');
     Sound.warn();
@@ -501,7 +614,7 @@
   }
 
   function startGame() {
-    Sound.init(); newGame(); state = STATE.playing;
+    Sound.init(); newGame(); state = STATE.playing; Music.tension(false);
     Object.keys(cache).forEach((k) => delete cache[k]);
     $('toast-area').innerHTML = '';
     showScreen('game'); updateHUD();
@@ -585,7 +698,11 @@
     else startGame();
   });
   $('btn-howto').addEventListener('click', () => { Sound.init(); modal(HOWTO, [{ label: 'OK' }]); });
-  $('btn-sound').addEventListener('click', () => { Storage.data.sound = !Storage.data.sound; Storage.save(); Sound.init(); Sound.door(); renderTitle(); });
+  $('btn-sound').addEventListener('click', () => {
+    Storage.data.sound = !Storage.data.sound; Storage.save();
+    if (!Storage.data.sound) Music.stop(0.3);
+    Sound.init(); Sound.door(); renderTitle();
+  });
   $('btn-retry').addEventListener('click', () => afterResult(startGame));
   $('btn-title').addEventListener('click', () => afterResult(goTitle));
   $('btn-double').addEventListener('click', async () => {
@@ -614,6 +731,7 @@
     else if (['q', 'w', 'e'].includes(e.key)) tapCustomer('qwe'.indexOf(e.key));
   });
   document.addEventListener('visibilitychange', () => {
+    if (Sound.ctx) { if (document.hidden) Sound.ctx.suspend(); else Sound.ctx.resume(); }
     if (document.hidden && state === STATE.playing && G && !G.paused) {
       G.paused = true; modal('<h2>一時停止中</h2>', [{ label: '再開', onClick: () => { G.paused = false; } }]);
     }
@@ -690,12 +808,35 @@
     if (female) { ctx.fillStyle = look.hair; rr(x - 12, y - 8, 24, 30, 9); ctx.fill(); }
     ctx.fillStyle = look.skin; ctx.beginPath(); ctx.arc(x, y, 10, 0, Math.PI * 2); ctx.fill();
     ctx.fillStyle = look.hair; ctx.beginPath(); ctx.arc(x, y - 2, 10.5, Math.PI * 1.02, Math.PI * 1.98); ctx.fill();
+    drawEyes(x, y, female);
     if (look.cap) {
       ctx.fillStyle = '#16233f'; rr(x - 11, y - 15, 22, 8, 3); ctx.fill(); ctx.fillRect(x - 13, y - 8, 26, 3);
       ctx.fillStyle = '#ffd54f'; ctx.fillRect(x - 2, y - 13, 4, 4);
     }
     if (look.gold) { ctx.fillStyle = '#ffd54f'; ctx.fillRect(x - 1.5, y + 13, 3, 12); }
     if (female && look.hl) { ctx.fillStyle = look.hl; ctx.beginPath(); ctx.arc(x + 7, y - 7, 3, 0, Math.PI * 2); ctx.fill(); }
+  }
+  // 目（ときどき瞬き）
+  function drawEyes(x, y, female) {
+    const blink = (T * 0.9 + x * 0.013) % 3.2 < 0.12;
+    const ey = y + 1;
+    ctx.save();
+    if (blink) {
+      ctx.strokeStyle = '#2a1a1a'; ctx.lineWidth = 1.4; ctx.lineCap = 'round';
+      ctx.beginPath(); ctx.moveTo(x - 6, ey); ctx.lineTo(x - 2.5, ey); ctx.moveTo(x + 2.5, ey); ctx.lineTo(x + 6, ey); ctx.stroke();
+    } else if (female) {
+      [-4.2, 4.2].forEach((dx) => {
+        ctx.fillStyle = '#2a1520'; ctx.beginPath(); ctx.ellipse(x + dx, ey, 2.1, 2.9, 0, 0, Math.PI * 2); ctx.fill();
+        ctx.fillStyle = '#fff'; ctx.beginPath(); ctx.arc(x + dx + 0.7, ey - 1.1, 0.9, 0, Math.PI * 2); ctx.fill();
+        ctx.strokeStyle = '#1a0d12'; ctx.lineWidth = 1.2; ctx.beginPath(); ctx.moveTo(x + dx - 2.6, ey - 2.4); ctx.lineTo(x + dx + 2.6, ey - 3); ctx.stroke();
+      });
+      ctx.fillStyle = 'rgba(255,110,150,0.35)';
+      ctx.beginPath(); ctx.arc(x - 6, ey + 4, 2.2, 0, Math.PI * 2); ctx.arc(x + 6, ey + 4, 2.2, 0, Math.PI * 2); ctx.fill();
+    } else {
+      ctx.fillStyle = '#1e1414';
+      ctx.beginPath(); ctx.ellipse(x - 4, ey, 1.6, 2.1, 0, 0, Math.PI * 2); ctx.ellipse(x + 4, ey, 1.6, 2.1, 0, 0, Math.PI * 2); ctx.fill();
+    }
+    ctx.restore();
   }
   function drawStanding(x, y, look, opts = {}) {
     const bob = opts.walking ? Math.abs(Math.sin(opts.phase || 0)) * 2 : 0;
@@ -930,9 +1071,11 @@
     requestAnimationFrame(frame);
   }
 
+  // ブラウザの制約で、最初のタップ時にBGMを開始する
+  document.addEventListener('pointerdown', () => Sound.init(), { once: false, passive: true });
   Storage.load(); resize(); buildBG(); renderTitle();
   requestAnimationFrame(frame);
 
   // テスト用フック
-  window.__game = { get state() { return state; }, get G() { return G; }, tapCast, tapCustomer, startGame };
+  window.__game = { get state() { return state; }, get G() { return G; }, tapCast, tapCustomer, startGame, Music };
 })();
