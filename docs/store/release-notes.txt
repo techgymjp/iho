@@ -1,0 +1,14 @@
+<ja-JP>
+初回リリース
+・表向きはただのバー。お客さんにお酒を勧めて売上UP！
+・ドアの音がしたら要注意。警察が来たらキャストをカウンターの中へ逃がそう
+・1プレイ3分、朝5時まで摘発されずに逃げ切れるか！？
+・日本語・英語に対応
+</ja-JP>
+<en-US>
+First release
+• It looks like an ordinary bar. Pour drinks for your guests to boost sales!
+• When the door chimes, watch out. If it's the police, hide the hostesses behind the counter
+• 3-minute rounds. Can you last until 5 AM without getting busted?
+• Available in English and Japanese
+</en-US>

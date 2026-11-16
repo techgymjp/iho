@@ -127,6 +127,12 @@ Running such a business without a license is illegal in real life.
 
 ---
 
+## リリースノート
+
+`release-notes.txt` の内容を Play Console のリリースの「リリースノート」にそのまま貼り付けます。
+
+---
+
 ## Play Console「アプリのコンテンツ」の回答の目安
 
 - **プライバシー ポリシー**: https://techgym.jp/privacy-policy/
