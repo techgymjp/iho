@@ -46,6 +46,8 @@ Settings → Pages → Source を「Deploy from a branch」、Branch を `main` 
 - 動作確認用 APK（デバッグ署名・テスト広告）：
   - リリース画面：https://github.com/techgymjp/iho/releases/tag/android-latest
   - APK 直接：https://github.com/techgymjp/iho/releases/latest/download/iho.apk
+
+  ![APK のリリース画面の QR コード](docs/apk-qr.png)
 - ビルドは GitHub Actions（`.github/workflows/android.yml`）。`main` への push で APK を作って上の Release に載せる。
   GitHub Secrets（`ANDROID_KEYSTORE_BASE64` など 4 つ）を登録すると、Google Play 用の署名付き AAB（本番広告）も Artifact に作られる
 - 広告（`js/ads.js`）：アプリのときだけ動く。Web 版では出さない
