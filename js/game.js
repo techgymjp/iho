@@ -13,6 +13,7 @@
   const params = new URLSearchParams(location.search);
   const SPEED = clamp(parseFloat(params.get('speed')) || 1, 0.25, 20); // テスト用
   const NO_ADS = params.get('noads') === '1';
+  const IS_NATIVE = !!(window.Capacitor && window.Capacitor.isNativePlatform && window.Capacitor.isNativePlatform());
   const STORE = 'BAR 夜更し';
 
   // ---------------------------------------------------------------- utils
@@ -37,8 +38,8 @@
 
   // ---------------------------------------------------------------- storage
   const Storage = {
-    key: 'tekihatsu_countdown_v3',
-    data: { bestScore: 0, plays: 0, totalSales: 0, totalPoints: 0, sound: true, tutorialDone: false, sinceAd: 0 },
+    key: 'tekihatsu_countdown_v4',
+    data: { bestScore: 0, plays: 0, totalSales: 0, sound: true, tutorialDone: false, sinceAd: 0 },
     load() { try { const d = JSON.parse(localStorage.getItem(this.key)); if (d) Object.assign(this.data, d); } catch (e) { /* noop */ } },
     save() { try { localStorage.setItem(this.key, JSON.stringify(this.data)); } catch (e) { /* noop */ } },
   };
@@ -205,7 +206,8 @@
 
   // ---------------------------------------------------------------- ads（Web版はダミー。失敗してもゲーム継続）
   const Ads = {
-    available() { return C.ads.enabled && !NO_ADS; },
+    // Web版では広告を出さない。ネイティブアプリ（Android）で動いている時だけ有効。
+    available() { return C.ads.enabled && !NO_ADS && IS_NATIVE; },
     showInterstitial() { return this.available() ? showAdOverlay('インタースティシャル広告', C.ads.interstitialSeconds, false).catch(() => false) : Promise.resolve(false); },
     showRewarded() { return this.available() ? showAdOverlay('リワード広告', C.ads.rewardedSeconds, true).catch(() => false) : Promise.resolve(false); },
   };
@@ -535,20 +537,18 @@
   }
 
   // ---------- end
+  // スコア＝売上高
   function computeScore() {
-    const salesScore = Math.min(50, G.sales / C.salesPerPoint);
-    const customerScore = Math.min(20, G.customers / C.customersPerPoint);
-    const survival = G.outcome === 'clear' ? C.survivalScore : 0;
-    const total = Math.round(salesScore + customerScore + survival);
+    const total = G.sales;
     const rank = C.ranks.find(([, m]) => total >= m)[0];
-    return { salesScore, customerScore, survival, total, rank };
+    return { total, rank };
   }
   function finish() {
     if (state === STATE.result || !G) return;
     state = STATE.result;
     G.score = computeScore();
     const d = Storage.data;
-    d.plays++; d.totalSales += G.sales; d.totalPoints += G.score.total;
+    d.plays++; d.totalSales += G.sales;
     G.newBest = G.score.total > d.bestScore; if (G.newBest) d.bestScore = G.score.total;
     Storage.save();
     showResult();
@@ -607,12 +607,11 @@
     $('res-rank').textContent = r.rank + 'ランク'; $('res-rank').className = 'rank-' + r.rank;
     $('res-pass').textContent = G.stats.passed + '回';
     $('res-time').textContent = fmtTime(G.min) + 'まで';
-    $('res-score').textContent = r.total;
-    $('res-best').textContent = G.newBest ? '🏆 NEW BEST SCORE!' : `BEST ${Storage.data.bestScore}`;
-    $('res-breakdown').textContent = `売上 ${r.salesScore.toFixed(1)}/50 ・ 来客 ${r.customerScore.toFixed(1)}/20 ・ 生存 ${r.survival}/30\nお酒 ${G.stats.drinks}杯（タワー ${G.stats.towers}回） ・ キャストを逃がした ${G.stats.escapes}回`;
+    $('res-best').textContent = G.newBest ? '🏆 NEW BEST SCORE!' : `BEST ${yen(Storage.data.bestScore)}`;
+    $('res-breakdown').textContent = `お酒 ${G.stats.drinks}杯（タワー ${G.stats.towers}回） ・ キャストを逃がした ${G.stats.escapes}回`;
     $('res-tip').innerHTML = '<b>💡 現実では</b> 客の隣に座って談笑・お酌をするなどの「接待」をする営業には、風俗営業の許可が必要とされています。許可なく接待営業を行うことは法律で禁止されています。<small>※本作はフィクションです。説明は一般的な内容を簡略化したものです。</small>';
     const dbl = $('btn-double');
-    dbl.classList.toggle('hidden', !Ads.available()); dbl.disabled = false; dbl.textContent = '▶ 広告を見て獲得ポイント2倍（任意）';
+    dbl.classList.toggle('hidden', !Ads.available()); dbl.disabled = false; dbl.textContent = '▶ 広告を見て売上2倍（任意）';
     G.doubled = false;
     showScreen('result');
   }
@@ -635,8 +634,8 @@
   }
   function renderTitle() {
     const d = Storage.data;
-    $('title-best').textContent = d.bestScore;
-    $('title-stats').textContent = d.plays ? `プレイ ${d.plays}回 ・ 累計売上 ${yen(d.totalSales)} ・ 累計 ${d.totalPoints}pt` : '';
+    $('title-best').textContent = yen(d.bestScore);
+    $('title-stats').textContent = d.plays ? `プレイ ${d.plays}回 ・ 累計売上 ${yen(d.totalSales)}` : '';
     $('btn-sound').textContent = d.sound ? '🔊 サウンド ON' : '🔇 サウンド OFF';
     $('ad-banner').classList.toggle('hidden', !Ads.available());
   }
@@ -714,15 +713,18 @@
     const btn = $('btn-double'); btn.disabled = true;
     let ok = false; try { ok = await Ads.showRewarded(); } catch (e) { ok = false; }
     if (ok) {
-      G.doubled = true; Storage.data.totalPoints += G.score.total; Storage.save();
-      btn.textContent = `✓ 獲得ポイント2倍！（+${G.score.total}pt）`; $('res-score').textContent = `${G.score.total} ×2`;
+      G.doubled = true; G.score.total *= 2;
+      const d = Storage.data; d.totalSales += G.sales;
+      if (G.score.total > d.bestScore) { d.bestScore = G.score.total; $('res-best').textContent = '🏆 NEW BEST SCORE!'; }
+      Storage.save();
+      btn.textContent = '✓ 売上2倍！'; $('res-sales').textContent = yen(G.score.total);
     } else btn.disabled = false;
   });
   $('btn-share').addEventListener('click', async () => {
     if (!G) return;
     const text = G.outcome === 'bust'
-      ? `【摘発カウントダウン】${fmtTime(G.min)}に摘発されました…売上${yen(G.sales)}（${G.score.total}点） #摘発カウントダウン`
-      : `【摘発カウントダウン】朝まで逃げ切った！売上${yen(G.sales)}・警察を${G.stats.passed}回やり過ごし・${G.score.rank}ランク（${G.score.total}点） #摘発カウントダウン`;
+      ? `【摘発カウントダウン】${fmtTime(G.min)}に摘発されました…売上${yen(G.score.total)} #摘発カウントダウン`
+      : `【摘発カウントダウン】朝まで逃げ切った！売上${yen(G.score.total)}・警察を${G.stats.passed}回やり過ごし・${G.score.rank}ランク #摘発カウントダウン`;
     const url = location.href.split('?')[0];
     try {
       if (navigator.share) await navigator.share({ text, url });

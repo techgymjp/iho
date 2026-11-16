@@ -56,11 +56,8 @@ window.CONFIG = Object.freeze({
   maxVipEvents: 2,
   buzzExtraCustomers: 5,
 
-  // --- スコア（100点満点。プレイテストで調整する仮設定） ---
-  salesPerPoint: 10000,         // 売上 50点満点 → 500,000円
-  customersPerPoint: 0.75,      // 来客 20点満点 → 15組
-  survivalScore: 30,            // 朝まで摘発されなければ30点
-  ranks: [['S', 90], ['A', 80], ['B', 65], ['C', 50], ['D', 0]],
+  // --- スコア（＝売上高）。ランクは売上で決まる ---
+  ranks: [['S', 500000], ['A', 350000], ['B', 200000], ['C', 100000], ['D', 0]],
 
   // --- BGM（ナイトバー風ジャズ） ---
   bgmVolume: 0.5,
