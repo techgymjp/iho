@@ -303,7 +303,7 @@
       casts: Array(C.seats).fill(null),   // その客と同伴のキャスト
       walkers: [], popups: [], particles: [], fx: [], alertT: 0, heatFlash: 0,
       spawnT: 0.6, buzzLeft: 0, vipNext: 0, vipCount: 0,
-      visit: null, visitT: rand(...C.visitIntervalSeconds),
+      visit: null, visitT: rand(...C.firstVisitSeconds),
       // 立入調査の予定（ゲーム内の経過分）
       insps: C.inspectionHours.map((h) => ((h + 24 - C.openingHour) % 24) * 60 + rand(-C.inspectionJitterMinutes, C.inspectionJitterMinutes)).sort((a, b) => a - b),
       sleepyT: 0, crackdownT: 0, doorT: 0,
@@ -702,7 +702,8 @@
   function updateHUD() {
     if (!G) return;
     setText('hud-time', fmtTime(G.min));
-    setText('hud-remain', '残り ' + Math.max(0, Math.ceil(C.gameDurationSeconds - G.elapsed)) + '秒');
+    const rs = Math.max(0, Math.ceil(C.gameDurationSeconds - G.elapsed));
+    setText('hud-remain', `残り ${Math.floor(rs / 60)}:${String(rs % 60).padStart(2, '0')}`);
     setText('hud-sales', yen(G.sales));
     setText('hud-cust', G.customers + '組');
     $('heat-fill').style.width = G.heat + '%';
@@ -770,13 +771,13 @@
   }
   const HOWTO = `
     <h2>遊び方</h2>
-    <p>あなたは「${STORE}」のオーナー。表向きはただのバーだけど、実は<b>女性キャストがカウンター席でお客さんの隣に座って接客</b>している（もちろん無許可）。<b>22:00〜翌5:00（${C.gameDurationSeconds}秒）</b>、摘発されずに稼ぎ切れ！</p>
+    <p>あなたは「${STORE}」のオーナー。表向きはただのバーだけど、実は<b>女性キャストがカウンター席でお客さんの隣に座って接客</b>している（もちろん無許可）。<b>22:00〜翌5:00（3分）</b>、摘発されずに稼ぎ切れ！</p>
     <ul class="howto">
       <li><b>🚪 来店</b>：お客さんはキャストと同伴でやって来て、カウンターに並んで座る。</li>
       <li><b>👆 お客さんをタップ</b>：お酒が出る。飲み終わったら、またタップでおかわり！ ビール→ハイボール→ワイン→シャンパン→タワーと単価UP。</li>
       <li><b>🔔 ドアの開く音に注意</b>：お客さんも警察も同じ音で入ってくる。<b>👮警察だったら、隣のキャストをタップしてカウンターの中へ逃がせ！</b></li>
       <li>警察がキャストに聞き込みをしたらその時点でアウト（摘発）。警察が出ていくまで油断禁止。</li>
-      <li>警察が帰ったら、カウンターの中のキャストをタップしてまた隣へ。お酒や接待で「疑惑」が溜まると警察が来やすくなり、MAXで踏み込まれる！ 0時ごろと3時ごろの立入調査は必ず来る。夜が更けるほど警察は厳しくなる！</li>
+      <li>警察が帰ったら、カウンターの中のキャストをタップしてまた隣へ。お酒や接待で「疑惑」が溜まると警察が来やすくなり、MAXで踏み込まれる！ 0時・2時・4時ごろの立入調査は必ず来る。夜が更けるほど警察は厳しくなる！</li>
     </ul>
     <p class="small">※本作はフィクションです。現実の無許可営業は法律で禁止されています。</p>`;
 
@@ -1231,6 +1232,10 @@
 
   // web-only:start
   // テスト・撮影用のフック（Web 版だけ。アプリ用のビルドでは取り除く）
-  window.__game = { get state() { return state; }, get G() { return G; }, tapCast, tapCustomer, startGame, Music, showRedo };
+  window.__game = {
+    get state() { return state; }, get G() { return G; }, tapCast, tapCustomer, startGame, Music, showRedo,
+    // 難易度のシミュレーション用：画面を描かずにゲームを進める
+    step: (dt) => update(dt), setSeed: (n) => { SEED = n; },
+  };
   // web-only:end
 })();
