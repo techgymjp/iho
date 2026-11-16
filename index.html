@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover">
 <meta name="theme-color" content="#07040f">
-<meta name="description" content="表向きは、ただのバー。警察が来たらキャストをカウンターへ！45秒のワンタップ偽装経営ゲーム。">
+<meta name="description" content="表向きは、ただのバー。ドアの音がしたら要注意！45秒のワンタップ偽装経営ゲーム。">
 <title>摘発カウントダウン</title>
 <link rel="manifest" href="manifest.webmanifest">
 <link rel="icon" href="icon.svg" type="image/svg+xml">
@@ -47,16 +47,14 @@
       </div>
     </header>
 
-    <div id="alarm" class="alarm hidden">
-      <div class="alarm-text" id="alarm-text">🚪 コンコン！ 誰か来た…</div>
-      <div class="alarm-bar"><div id="alarm-fill"></div></div>
-    </div>
     <div id="toast-area"></div>
     <div id="msg-line" class="msg-line"></div>
 
     <footer class="controls">
-      <div class="ctl-hint">👆 客をタップでお酒 ／ 👮警察ならキャストをタップでカウンターの中へ</div>
-      <button id="btn-seat" class="ctl ctl-main"><span class="ico">🚪</span><span>案内する<small>カウンター席へ（キャストが隣に）</small></span></button>
+      <div class="guide">
+        <div><span>👆</span><b>お客さんをタップ</b>＝お酒（飲み終わったらおかわり）</div>
+        <div><span>🔔</span><b>ドアの音</b>がしたら要注意！ 👮なら<b>キャストをタップ</b>で逃がせ</div>
+      </div>
     </footer>
   </section>
 

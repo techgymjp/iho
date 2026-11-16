@@ -10,13 +10,11 @@ window.CONFIG = Object.freeze({
   inspectionHour: 3,            // 03:00前後に必ず立入調査
   inspectionJitterMinutes: 10,
 
-  // --- 来客 ---
-  minCustomerInterval: 1.3,
-  maxCustomerInterval: 2.6,
-  maxWaiting: 3,                // 入口で待てる人数
-  minWaitSeconds: 3.0,          // 入口で待つ時間（過ぎると帰る）
-  maxWaitSeconds: 5.0,
+  // --- 来客（お客さんはキャストと同伴で来店し、カウンターに並んで座る） ---
+  minCustomerInterval: 1.6,
+  maxCustomerInterval: 3.0,
   seats: 3,                     // カウンター席（客＋隣にキャスト）の組数
+  pairEnterSeconds: 0.9,        // ドアから席に着くまで
   staySeconds: [7.0, 9.5],
 
   // --- 売上 ---
@@ -35,33 +33,32 @@ window.CONFIG = Object.freeze({
   heatPerSettaiSecond: 1.0,     // 客の隣にキャストが座っている1組あたり
   heatPerDrink: 2.5,            // お酒を勧めるたび
   heatDecayNoSettai: 2.5,       // 誰も接待していない時の減少量
-  heatUndercover: 40,           // 内偵客の隣にキャストを座らせてしまった
   heatTipOff: 25,               // タレコミ
   heatAfterPassedVisit: -25,    // 警察をやり過ごした後
 
-  // --- 来訪者（ノック） ---
-  visitIntervalSeconds: [4.5, 7.5],
-  policeChanceBase: 0.3,        // 疑惑0のとき警察である確率
-  policeChanceAtMaxHeat: 0.85,
-  warningSecondsSafe: 2.4,      // 疑惑0のときの猶予（ノックからドアが開くまで）
-  warningSecondsHot: 1.2,       // 疑惑100のときの猶予
-  raidWarningSeconds: 1.0,      // 疑惑MAXの踏み込み
-  castToCounterSeconds: 0.35,   // タップしたキャストがカウンターに戻るまで
-  castToBoxSeconds: 0.5,        // キャストが客の隣に座るまで
+  // --- 警察（ドアの開く音で来店。見回りが始まるまでにキャストを逃がす） ---
+  visitIntervalSeconds: [6.0, 10.0],
+  visitIntervalAtMaxHeat: 0.5,  // 疑惑MAX付近では間隔がこの倍率まで短くなる
+  warningSecondsSafe: 1.8,      // 疑惑0：ドアが開いてから店内を見るまで
+  warningSecondsHot: 1.0,       // 疑惑100
+  raidWarningSeconds: 0.7,      // 疑惑MAXの踏み込み
+  castToCounterSeconds: 0.35,   // タップしたキャストがカウンターの中に逃げるまで
+  castToBoxSeconds: 0.5,        // キャストが客の隣に戻るまで
   policeInsideSeconds: 1.8,     // 警察が店内を見回る時間
-  visitorInsideSeconds: 1.2,
-  sleepyLookoutFactor: 0.55,    // 見張りが居眠り中は猶予が短くなる
+  policeExitSeconds: 0.7,       // 帰っていく時間（出ていくまで油断禁止）
+  sleepyLookoutFactor: 0.6,     // 見張りが居眠り中は猶予が短くなる
   sleepyLookoutSeconds: 8,
+  crackdownSeconds: 8,          // 取り締まり強化中は警察が早く来る
 
   // --- イベント ---
   minRandomEvents: 3,
   maxRandomEvents: 5,
   maxVipEvents: 2,
-  buzzExtraCustomers: 8,
+  buzzExtraCustomers: 5,
 
   // --- スコア（100点満点。プレイテストで調整する仮設定） ---
   salesPerPoint: 10000,         // 売上 50点満点 → 500,000円
-  customersPerPoint: 1.5,       // 来客 20点満点 → 30人
+  customersPerPoint: 0.75,      // 来客 20点満点 → 15組
   survivalScore: 30,            // 朝まで摘発されなければ30点
   ranks: [['S', 90], ['A', 80], ['B', 65], ['C', 50], ['D', 0]],
 
