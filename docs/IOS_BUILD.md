@@ -11,14 +11,14 @@
 
 ---
 
-## 0. AdMob の iOS 用 ID を入れる（ID が届いたら 1 回だけ。Claude Code が行う）
+## 0. AdMob の iOS 用 ID（設定済み）
 
 | 入れる場所 | 内容 |
 | --- | --- |
-| `ios/App/App/Info.plist` の `GADApplicationIdentifier` | iOS 用のアプリ ID（`ca-app-pub-…~…`）。今は Google 公式のテスト用アプリ ID |
-| `js/ads.js` の `UNITS.ios.production` | バナー・インタースティシャル・リワードの広告ユニット ID |
+| `ios/App/App/Info.plist` の `GADApplicationIdentifier` | iOS 用のアプリ ID `ca-app-pub-6411535997477460~9462141099` |
+| `js/ads.js` の `UNITS.ios.production` | バナー・インタースティシャル・リワードの広告ユニット ID（3 種類とも設定済み） |
 
-広告ユニット ID が空の種類は、本番ビルド（`ios:release`）では出ません。テスト広告（`ios:sync`）はいつでも出ます。
+本番の広告（`ios:release`）とテスト広告（`ios:sync`）は、コピーするときのコマンドで切り替わります。
 
 ---
 

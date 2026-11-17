@@ -73,7 +73,7 @@ Settings → Pages → Source を「Deploy from a branch」、Branch を `main` 
   npm run ios:open      # Xcode で開く
   ```
 - GitHub Actions：`ios.yml`（署名なしでビルドできるかを確認）、`ios-release.yml`（Secrets 5 つがそろえば TestFlight に自動アップロード）
-- AdMob の iOS 用 ID：`ios/App/App/Info.plist` の `GADApplicationIdentifier`（設定済み）と `js/ads.js` の `UNITS.ios.production`（バナー・インタースティシャルは設定済み。リワードは未設定）
+- AdMob の iOS 用 ID：`ios/App/App/Info.plist` の `GADApplicationIdentifier`（設定済み）と `js/ads.js` の `UNITS.ios.production`（3 種類とも設定済み）
 - App Store 用の画像と文章：`docs/store/ios/`（スクリーンショット 1206 × 2622 日英各 4 枚、ヘッダ、検索結果、`listing.md`）
 
 ## 保存データ（localStorage）
