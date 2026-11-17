@@ -1,4 +1,5 @@
-// Google AdMob 広告（Android アプリのときだけ動く。Web 版では何もしない）
+// Google AdMob 広告（Android / iOS アプリのときだけ動く。Web 版では何もしない）
+// AdMob では Android と iOS を別のアプリとして登録しているので、広告ユニットも OS ごとに分かれている
 // 構成は techgymjp/jackal の ads.js と同じ。リワード・インタースティシャル・バナーを使う
 window.Ads = (() => {
   // 空の種類は本番ビルド(ストア用)では出さない
@@ -23,7 +24,12 @@ window.Ads = (() => {
         rewarded: 'ca-app-pub-3940256099942544/1712485313',
         banner: 'ca-app-pub-3940256099942544/2934735716',
       },
-      production: { interstitial: '', rewarded: '', banner: '' },
+      // 本番の広告ユニット（AdMob の iOS アプリ「摘発カウントダウン」）。ID が届いたらここに入れる
+      production: {
+        interstitial: '',
+        rewarded: '',
+        banner: '',
+      },
     },
   };
   const RETRY_MS = 20000;      // 読み込みに失敗したら少し待って再挑戦する
@@ -89,6 +95,14 @@ window.Ads = (() => {
       privacyRequired = consent.privacyOptionsRequirementStatus === 'REQUIRED';
     } catch (e) {
       ready = true;
+    }
+    // iOS では、広告用の ID を使ってよいか（App Tracking Transparency）を利用者に確認する。
+    // 同意確認のあとに一度だけ出る。断られても広告は出せる（パーソナライズされないだけ）
+    if (platform === 'ios') {
+      try {
+        const { status } = await AdMob.trackingAuthorizationStatus();
+        if (status === 'notDetermined') await AdMob.requestTrackingAuthorization();
+      } catch (e) { /* 確認できなくても広告は続ける */ }
     }
     let rewarded = false;
     AdMob.addListener('interstitialAdDismissed', () => finish('inter'));

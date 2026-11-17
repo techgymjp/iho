@@ -63,6 +63,19 @@ Settings → Pages → Source を「Deploy from a branch」、Branch を `main` 
   npm run android:open   # Android Studio で開く
   ```
 
+## iOS アプリ
+- Bundle ID：`jp.techgym.iho`（Android と同じ）／縦画面・iPhone 専用／日本語・英語
+- 構成は Android と同じ Capacitor 8（`ios/`。Swift Package Manager、CocoaPods 不要）。JET STRIKE（techgymjp/jet-fighter）と同じ構成
+- Mac での作業（動作確認・App Store へのアップロード・審査への提出）は `docs/IOS_BUILD.md`
+  ```bash
+  npm run ios:sync      # テスト広告で iOS のプロジェクトにコピー
+  npm run ios:release   # 本番広告でコピー（App Store 用）
+  npm run ios:open      # Xcode で開く
+  ```
+- GitHub Actions：`ios.yml`（署名なしでビルドできるかを確認）、`ios-release.yml`（Secrets 5 つがそろえば TestFlight に自動アップロード）
+- AdMob の iOS 用 ID：`ios/App/App/Info.plist` の `GADApplicationIdentifier`（今はテスト用）と `js/ads.js` の `UNITS.ios.production`（未設定）
+- App Store 用の画像と文章：`docs/store/ios/`（スクリーンショット 1206 × 2622 日英各 4 枚、ヘッダ、検索結果、`listing.md`）
+
 ## 保存データ（localStorage）
 ベストスコア（最高売上）、総プレイ回数、累計売上、サウンド設定、チュートリアル完了。
 

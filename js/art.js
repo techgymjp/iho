@@ -32,8 +32,8 @@
   }
 
   // ---------- 目（アニメ調・瞬きあり）
-  function animeEyes(ctx, cx, cy, eye, t, seed, lashColor = '#2b1414') {
-    const blink = (t * 0.85 + seed * 0.37) % 3.4 < 0.13;
+  function animeEyes(ctx, cx, cy, eye, t, seed, lashColor = '#2b1414', noBlink = false) {
+    const blink = !noBlink && (t * 0.85 + seed * 0.37) % 3.4 < 0.13;
     [-1, 1].forEach((side) => {
       const ex = cx + side * 5.6, ey = cy;
       if (blink) {
@@ -192,7 +192,7 @@
     ctx.strokeStyle = shade(c.hair, -0.2); ctx.lineWidth = 0.9;
     ctx.beginPath(); ctx.moveTo(-9, -71.5); ctx.quadraticCurveTo(-5.5, -73, -2.5, -71.8); ctx.stroke();
     ctx.beginPath(); ctx.moveTo(9, -71.5); ctx.quadraticCurveTo(5.5, -73, 2.5, -71.8); ctx.stroke();
-    animeEyes(ctx, 0, -63.5, c.eye, t, x * 0.1 + (c.seed || 0));
+    animeEyes(ctx, 0, -63.5, c.eye, t, x * 0.1 + (c.seed || 0), '#2b1414', !!opts.eyesOpen); // 静止画では瞬きしない
     // 口
     ctx.strokeStyle = '#d4576b'; ctx.lineWidth = 1.1; ctx.lineCap = 'round';
     ctx.beginPath(); ctx.moveTo(-2.2, -55.6); ctx.quadraticCurveTo(0, -54, 2.2, -55.6); ctx.stroke();

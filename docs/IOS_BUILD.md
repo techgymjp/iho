@@ -1,0 +1,222 @@
+# iOS 版をビルドして App Store に出す手順（Mac での作業）
+
+摘発カウントダウンの iOS 版は、Android 版と同じ Capacitor で作っています（`ios/` フォルダ）。構成は JET STRIKE（techgymjp/jet-fighter）と同じです。
+コードの準備はできているので、Mac では「ビルドして App Store Connect にアップロードする」作業だけを行います。
+
+- Bundle ID：`jp.techgym.iho`（Android と同じ）
+- チーム：Team ID `GNM3VTX9YG`（Xcode の設定に入れてあります）。Apple Developer には**個人で登録**しています（App Store の販売元は個人名になります）
+- 対応端末：iPhone（**縦画面固定**）。iPad では iPhone 用の画面で動きます
+- 言語：日本語・英語（端末の言語に合わせて切り替わる。タイトル画面でも切り替えられる）。ホーム画面の名前は「摘発カウントダウン」／「Raid Countdown」
+- 広告：AdMob（iOS 用のアプリと広告ユニット）。バナー・インタースティシャル・リワード（もみ消し）。起動時に「トラッキングの許可」の確認画面が出ます
+
+---
+
+## 0. AdMob の iOS 用 ID を入れる（ID が届いたら 1 回だけ。Claude Code が行う）
+
+| 入れる場所 | 内容 |
+| --- | --- |
+| `ios/App/App/Info.plist` の `GADApplicationIdentifier` | iOS 用のアプリ ID（`ca-app-pub-…~…`）。今は Google 公式のテスト用アプリ ID |
+| `js/ads.js` の `UNITS.ios.production` | バナー・インタースティシャル・リワードの広告ユニット ID |
+
+広告ユニット ID が空の種類は、本番ビルド（`ios:release`）では出ません。テスト広告（`ios:sync`）はいつでも出ます。
+
+---
+
+## 1. Mac の準備（最初の1回だけ）
+
+1. **Xcode** を App Store からインストールする（数十 GB あるので時間がかかります）。インストール後に一度起動し、追加コンポーネントのインストールを済ませる
+2. Xcode の「Settings…」→「Accounts」→「＋」で、Apple Developer に登録している Apple ID でサインインする（チームが個人名で表示されれば OK）
+3. **Node.js**（LTS 版）を https://nodejs.org/ からインストールする
+4. ターミナルでリポジトリを取得する
+   ```bash
+   cd ~/Desktop   # 置きたい場所（どこでもよい）
+   git clone https://github.com/techgymjp/iho.git
+   cd iho
+   npm ci
+   ```
+   `git` がないと言われたら、表示に従って「コマンドライン・デベロッパツール」をインストールしてから、もう一度実行します。
+
+2回目以降は、`cd iho` のあと `git pull` と `npm ci` で最新にします。
+
+---
+
+## 2. 自分の iPhone で動作確認する（テスト広告）
+
+```bash
+npm run ios:sync    # ゲームのファイルを iOS のプロジェクトにコピー（テスト広告）
+npm run ios:open    # Xcode で開く
+```
+
+1. iPhone を USB ケーブルで Mac につなぎ、iPhone で「このコンピュータを信頼」を許可する
+2. iPhone の「設定」→「プライバシーとセキュリティ」→「デベロッパモード」をオンにする（再起動を求められます。項目がない場合は、Xcode で一度 iPhone を選ぶと表示されます）
+3. Xcode の上部で、実行先に自分の iPhone を選ぶ
+4. 左の「App」→「Signing & Capabilities」で、「Automatically manage signing」がオン、Team に自分（個人名）のチームが選ばれていることを確認する
+5. ▶（Run）を押すと、iPhone にアプリが入って起動する
+
+確認すること：
+- 縦画面の全画面表示になり、上下（ノッチ・ホームバー）に表示が隠れない
+- トラッキングの確認画面が出る
+- お客さんのタップでお酒が出る、キャストのタップでカウンターの中へ逃げる
+- BGM・ドアチャイム・サイレンが鳴る（消音スイッチがオンだと鳴らないことがある）
+- **テスト広告**が出る：タイトル・あそびかた・ポーズ・結果画面の下にバナー、開店・RETRY・TITLE・ポーズからの再開で全画面広告、摘発されたときに「広告を見て もみ消す」
+- 結果画面の「結果をシェア」で iOS の共有メニューが出る
+- ホームに戻ってから戻ると一時停止している
+
+---
+
+## 3. App Store 用にビルドしてアップロードする（本番広告）
+
+```bash
+git pull && npm ci
+npm run ios:release   # 本番の広告 ID でコピーする（ここが ios:sync と違う）
+npm run ios:open
+```
+
+1. Xcode の左で「App」→「General」→「Identity」を開き、**Build の番号を前回より大きくする**（初回は 1。アップロードのたびに 2、3…と上げる。同じ番号は二度アップロードできない）。Version はストアに表示されるバージョン（1.0.0）
+2. 上部の実行先を「**Any iOS Device (arm64)**」にする
+3. メニューの「Product」→「**Archive**」
+4. 終わると Organizer が開くので、「**Distribute App**」→「**App Store Connect**」→「Upload」で進める（途中の確認は既定のまま「Next」でよい）
+5. 10〜30 分ほどで、App Store Connect の「TestFlight」タブにビルドが表示される
+
+輸出コンプライアンス（暗号化）の質問は、Info.plist で「独自の暗号化は使っていない」と設定済みなので、聞かれません。
+
+**注意**：`ios:release` でビルドしたアプリは本番の広告が出ます。TestFlight で確認するときも、**本番の広告はタップしない**でください（AdMob のアカウント停止の対象）。Xcode から iPhone に直接入れて試すときは、`npm run ios:sync` でテスト広告に戻してから実行します。
+
+---
+
+## 4. TestFlight で確認する
+
+1. App Store Connect の「TestFlight」→「内部テスト」でグループを作り、自分を追加する
+2. iPhone に「TestFlight」アプリを App Store から入れ、届いた招待から摘発カウントダウンをインストールする
+
+---
+
+## 5. App Store Connect で審査に出す
+
+事前に、Apple Developer で Bundle ID `jp.techgym.iho` の App ID を登録し（Capabilities は何もチェックしない）、App Store Connect で「新規 App」を作っておきます（名前「摘発カウントダウン」、プライマリ言語 日本語、SKU `iho`）。
+
+「配信」タブ（iOS App のバージョン 1.0.0）で入力します。文章は `docs/store/ios/listing.md` にまとめてあります。
+
+| 項目 | 入力内容 |
+| --- | --- |
+| スクリーンショット | 「Dynamic Island 搭載 iPhone（中型ディスプレイ）」の欄に、`docs/store/ios/6.3inch/` の 1206 × 2622（縦向き）を入れる。日本語版（ja-）と英語版（en-）各 4 枚 |
+| ヘッダ・検索結果 | 「ヘッダと検索結果」タブに `docs/store/ios/appstore-header-3840x1646.png` と `appstore-search-3840x2560.png` |
+| 名前・サブタイトル・プロモーション用テキスト・キーワード | `docs/store/ios/listing.md` |
+| 概要 | Google Play 用の「詳しい説明」（`docs/store/listing.md`）を流用 |
+| サポート URL | https://techgym.jp/ |
+| プライバシーポリシー URL（App 情報） | https://techgym.jp/privacy-policy/ |
+| 著作権 | 2026 TECH GYM K.K. |
+| ビルド | TestFlight で確認したビルドを選ぶ |
+| 年齢制限 | 質問に正直に答える（お酒の描写がゲームの中心。暴力・性的な描写・ギャンブルはなし） |
+| App のプライバシー | AdMob が収集するデータを申告する（下記） |
+| App Review に関する情報 | ログイン不要。連絡先を入力。メモに下の「審査へのメモ」を貼る |
+
+**App のプライバシー（AdMob を使うアプリの目安）**
+Google の「Apple の App Store のデータ開示要件への準備」（AdMob のヘルプ）に、AdMob が収集するデータの一覧があります。必ずそちらを見て最終確認してください。目安は次のとおりです。
+
+- 収集する：ID（デバイス ID）、使用状況データ（広告データ、製品の操作）、診断（クラッシュデータ、パフォーマンスデータ、その他の診断データ）、位置情報（おおよその場所）
+- 目的：サードパーティ広告、アナリティクス
+- ユーザーに関連付け：しない
+- トラッキングに使用：デバイス ID と広告データは「する」
+
+**審査へのメモ（App Review に関する情報の「メモ」に貼る。`techgymjp/jet-fighter` の `docs/ANDROID_PORTING.md` 7-6 のひな形どおり。初回に「Guideline 2.1 - Information Needed」が来たら、同じ文を返信する）**
+
+```
+1. Purpose and audience: Raid Countdown (摘発カウントダウン) is a free one-tap casual game for adults. The player runs a fictional bar for one night (a 3-minute round): tap guests to serve drinks, and when the door chimes and a police officer walks in, tap the hostesses to hide them behind the counter before the officer questions them. The goal is to keep the bar open until 5 AM and earn as much as possible.
+
+2. How to use: No login or account is needed. Tap "START" on the title screen (a short "How to play" screen appears the first time). During play, tap a seated guest to serve a drink and tap a hostess to send her behind the counter (tap her again later to return). The pause button is at the top right. The game is in Japanese and English (it follows the device language and can be switched on the title screen).
+
+3. External services: Google AdMob (banner, interstitial and rewarded ads) with Google's consent form (UMP) and App Tracking Transparency. Rewarded ads are optional: when the player gets busted, the player can watch one to "cover it up" and keep playing (once per game). The share button uses the iOS share sheet. No other services or in-app purchases.
+
+4. Regional differences: None, except that the ad consent form appears only where required (e.g. EEA/UK).
+
+5. Regulated content / third-party material: The game is not in a regulated industry and contains no gambling, no violence and no sexual content. It is a comedic, fictional story set in a fictional nightlife district; the characters wear dresses and only sit and talk with guests. It does not encourage running an unlicensed business or drinking: the title screen, the "How to play" screen and the results screen state that the game is fiction and that running such a business without a license is illegal in real life. All graphics and sounds are original: the characters and the bar are drawn in code, and the music and sound effects are synthesized in real time. There is no third-party content.
+
+6. Originality (Guideline 4.3): Raid Countdown is an original app that we designed and built ourselves. It does not copy or imitate any other app, and it is not made from a template, a purchased source code or a re-skin of another game. All character illustrations, the bar scene, the music and the sound effects were created specifically for this app. It is also not a template-based variation of our other apps. Each of our games has its own game system that we designed and programmed individually for that title, and we do not reuse a game template from one app to make another, even when two of our games are in the same genre. This game's system (guests who arrive with a hostess and sit side by side at the counter; drink orders that escalate up to a champagne tower; the door chime shared by guests and police; the suspicion meter; and police officers who look around, walk up to a hostess and question her) was built only for this title, and its gameplay, content and visuals are its own. Only standard technical parts, such as the Capacitor app shell and the AdMob ad integration, are shared across our apps. We publish this game as a single app with one Bundle ID; there are no other versions of it on the App Store (for example, no separate free and paid editions or regional copies).
+
+7. App functionality (Guideline 4.2): The app is not a website wrapper. All game content (code, illustrations, music, sounds and texts) is bundled in the app and fully playable offline (only ads and sharing need a connection). It also uses native iOS features such as the share sheet and App Tracking Transparency.
+
+8. Features that appear only in some situations (Guideline 5.6): The app has no hidden, dormant or remotely enabled features. It behaves the same during review as for all users, and it does not download or run code from the internet. These parts appear only under certain conditions:
+- "Watch an ad to cover it up" screen: appears when the player gets busted, once per game, only if a rewarded ad could be loaded. Watching the ad lets the player keep playing; "Results" (or waiting a few seconds) goes to the results screen.
+- Interstitial ad: shown when starting a game, on "Retry" and "Title" on the results screen, and on "Resume" and "Title" on the pause screen.
+- Banner ad: shown at the bottom of the title, how-to-play, pause and results screens only (never during play).
+- "Ad settings" link on the title screen: appears only where Google's consent form is required (e.g. EEA/UK) and reopens that form.
+- Language buttons (日本語 / English) on the title screen switch the language at any time.
+- Switching to another app (or an incoming call) pauses the game.
+The app contains no debug menu, no test switches and no links to other app stores.
+```
+
+入力が終わったら「審査用に追加」→「審査へ提出」。
+
+---
+
+## 6. 公開後にやること
+
+- AdMob で iOS アプリを App Store のアプリに紐づける（「アプリ」→ iOS の摘発カウントダウン →「アプリの設定」）
+- App Store からインストールして、起動・同意画面・トラッキングの確認・広告を確認する（本番の広告はタップしない）
+
+---
+
+## 7. 自動化の準備（2回目以降を GitHub Actions に任せる場合）
+
+Android 版と同じように、push するだけで GitHub Actions（GitHub の Mac 環境）がビルドし、App Store Connect（TestFlight）にアップロードできるようにするための準備です。
+**証明書の書き出しに Mac が必要**なので、家の Mac で 3 章の作業をするついでに行うと効率的です。ここで作るもの（API キーと証明書）は Apple Developer のチーム共通なので、**JET STRIKE などで作ったものをそのまま使い回せます**。
+
+### 7-1. App Store Connect の API キーを作る（ブラウザ。作成済みなら不要）
+
+1. App Store Connect の「ユーザとアクセス」→「統合」→「App Store Connect API」→「チームキー」を開く
+2. 「＋」（API キーを生成）を押し、名前（例：`GitHub Actions`）とアクセス「**管理**」（Admin）を選んで生成する
+3. 表示された **キー ID** と、ページ上部の **Issuer ID** を控える
+4. 「API キーをダウンロード」で `AuthKey_XXXXXXXXXX.p8` を保存する（**ダウンロードは1回しかできない**。なくしたら作り直す）
+
+### 7-2. 配布用の証明書を書き出す（Mac。作成済みなら不要）
+
+1. Xcode の「Settings…」→「Accounts」→ チームを選び「Manage Certificates…」
+2. 「＋」→「**Apple Distribution**」で証明書を作る（3 章で Archive / Upload を済ませていれば、すでにできていることもある）
+3. Mac の「キーチェーンアクセス」を開き、「ログイン」→「自分の証明書」で「Apple Distribution: …」を右クリック →「書き出す」
+4. ファイル形式「個人情報交換（.p12）」で保存し、書き出し用のパスワードを決める
+
+### 7-3. GitHub に登録する
+
+ターミナルで、ファイルを文字列に変換してクリップボードにコピーします（1つずつ実行して、そのつど GitHub に貼り付ける）。
+
+```bash
+base64 -i 証明書.p12 | tr -d '\n' | pbcopy
+base64 -i AuthKey_XXXXXXXXXX.p8 | tr -d '\n' | pbcopy
+```
+
+https://github.com/techgymjp/iho/settings/secrets/actions に、次の 5 つを登録します（リポジトリごとに登録が必要）。
+
+| 名前 | 内容 |
+| --- | --- |
+| `IOS_DIST_CERT_P12_BASE64` | 証明書（.p12）を変換した文字列 |
+| `IOS_DIST_CERT_PASSWORD` | .p12 を書き出したときのパスワード |
+| `ASC_KEY_ID` | API キーのキー ID |
+| `ASC_ISSUER_ID` | Issuer ID |
+| `ASC_KEY_P8_BASE64` | API キー（.p8）を変換した文字列 |
+
+### 7-4. そのあと
+
+ワークフロー `.github/workflows/ios-release.yml`（と `scripts/ios_profile.py`）を入れてあります。Secrets が 5 つそろっていれば、`main` に push するたびに、本番広告の設定（`build:app`）でビルドして App Store Connect（TestFlight）にアップロードします。Secrets がなければ何もしません。
+
+- 手で動かすとき：GitHub の「Actions」→「iOS release (TestFlight)」→「Run workflow」
+- ビルド番号は **100 + 実行回数**（Mac から手でアップロードした 1、2 と重ならない）。Version は `package.json` の version（1.0.0）
+- Bundle ID `jp.techgym.iho` が Apple Developer に登録済みであること（5 章）
+- 10〜30 分で TestFlight に出たら、バージョンのページの「ビルド」で新しい番号を選んで審査に出す。審査への提出は、これまでどおり App Store Connect で行う
+
+また、`.github/workflows/ios.yml` が push のたびに「署名なしでビルドできるか」を確認します（Secrets 不要）。
+
+**注意**：証明書（.p12）、そのパスワード、API キー（.p8）は、アップロード鍵と同じく、チャット・AI へのアップロード・リポジトリへのコミットで**絶対に共有しない**でください。誤って共有したら、App Store Connect で API キーを取り消し、証明書も取り消して作り直します。
+
+## つまずきやすいところ
+
+| 症状 | 対処 |
+| --- | --- |
+| アップロードで「同じビルド番号がすでにある」 | General の Build の番号を上げてから Archive し直す |
+| Signing でエラー（チームが選べない、証明書がない） | Xcode の Accounts で Apple ID にサインインし直し、Team を選ぶ。「Automatically manage signing」をオンにする |
+| 実行先に iPhone が出ない | ケーブルをつなぎ直し、iPhone で「信頼」を許可。デベロッパモードをオンにする |
+| ビルドが古いゲームのまま | `npm run ios:sync`（または `ios:release`）を実行し忘れている。`git pull` してから実行し直す |
+| 音が鳴らない | iPhone の消音スイッチ（サイレントモード）をオフにする |
+| App Store の審査で「Xcode が古い」と言われる | Xcode を最新版に更新してから Archive し直す |
+| 6.9 インチのスクリーンショットがアップロードできない | 「中型ディスプレイ」（6.3 インチ）の欄に 1206 × 2622 を入れる |
+| ビルドを選ぼうとしても出てこない | App Store Connect のバージョンが「1.0」のままになっている。「1.0.0」に直して保存する |
