@@ -30,7 +30,44 @@ Google Play 用の文章は `../listing.md` にあります（「概要」はそ
 表向きは、ただのバー。お酒を勧めて稼ぎ、ドアの音がしたら警察か確かめて、キャストをカウンターの中へ逃がそう。1プレイ3分、朝5時まで摘発されずに営業できるか！？
 ```
 
-**概要**：`../listing.md` の日本語の「詳しい説明」をそのまま貼る。
+**概要**（App Store Connect で使えない記号「♪ → ■ • — …」や全角スペースを外した版）
+
+```
+表向きは、ただのバー。
+でも本当は、キャストがお客さんの隣で接客している、ちょっと危ないお店。
+
+カランコロン！ ドアの音がしたら要注意。
+入ってきたのはお客さん？ それとも警察！？
+
+【遊び方はタップだけ】
+・お客さんをタップして、お酒をどんどん勧めよう
+・ビール、ハイボール、ワイン、シャンパン、そしてシャンパンタワー！
+・警察が来たら、キャストをタップしてカウンターの中へ逃がそう
+・警察にキャストへ聞き込みされたら、摘発！
+
+【ドキドキの駆け引き】
+・稼ぐほど「疑惑」がたまって、警察が来やすくなる
+・0時、2時、4時には立入調査が必ずやってくる
+・夜が更けるほど、警察はどんどん厳しく
+・SNSでバズる、VIP来店、元従業員のタレコミ、見張りの居眠りなど、毎晩ちがう事件が起こる
+
+【ネオンきらめく夜のバー】
+・大きな瞳のキャストたち、ミラーボール、キラキラの演出
+・ナイトバー風のジャズが流れる店内
+・摘発されると、ピーポーピーポー！ 架空の新聞記事も
+
+【その他】
+・1プレイ3分。すき間時間にサクッと遊べる
+・スコアは売上高。Sランクを目指そう
+・結果を友だちにシェア
+・オフラインでも遊べる（広告とシェアは通信が必要）
+・日本語、英語に対応
+
+朝5時まで、摘発されずに逃げ切れるか！？
+
+※本作はフィクションです。実在の人物、団体、店舗、事件とは関係ありません。
+現実の無許可営業は法律で禁止されています。
+```
 
 ---
 
@@ -48,7 +85,44 @@ Google Play 用の文章は `../listing.md` にあります（「概要」はそ
 It looks like an ordinary bar. Pour drinks to boost sales, and when the door chimes, hide the hostesses before the police question them. Can you last until 5 AM?
 ```
 
-**Description**: paste the English "Full description" from `../listing.md`.
+**Description** (without symbols that App Store Connect rejects)
+
+```
+It looks like an ordinary bar.
+But behind the counter, the hostesses sit right next to the customers, and that is not allowed.
+
+Ding-dong! Whenever the door chimes, watch out.
+Is it a customer, or the police?!
+
+[SIMPLE TAP CONTROLS]
+- Tap a customer to pour another drink
+- Beer, highball, wine, champagne, and finally a champagne tower!
+- When the police walk in, tap the hostesses to hide them behind the counter
+- If the police question a hostess, you're busted!
+
+[A THRILLING GAME OF CAT AND MOUSE]
+- The more you earn, the more suspicion builds, and the sooner the police come
+- Inspections always come at midnight, 2 AM and 4 AM
+- The later the night gets, the tougher the police become
+- Going viral, VIP guests, a tip-off from an ex-employee, a sleepy lookout: every night is different
+
+[A NEON-LIT NIGHT BAR]
+- Big-eyed hostesses, a mirror ball and sparkling effects
+- Smooth night-bar jazz
+- Get busted and the sirens wail, and you make the (fictional) news
+
+[FEATURES]
+- 3-minute rounds, perfect for a quick break
+- Your score is your sales. Aim for rank S!
+- Share your results with friends
+- Plays offline (ads and sharing need a connection)
+- English and Japanese
+
+Can you keep the bar open until 5 AM without getting busted?
+
+This game is fiction. Any resemblance to real people, organizations, businesses or events is coincidental.
+Running such a business without a license is illegal in real life.
+```
 
 ---
 
