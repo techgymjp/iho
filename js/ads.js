@@ -13,7 +13,7 @@ window.Ads = (() => {
       },
       // 本番の広告ユニット（AdMob の Android アプリ「摘発カウントダウン」）
       production: {
-        interstitial: 'ca-app-pub-6411535997477460/8337351012',
+        interstitial: 'ca-app-pub-6411535997477460/4206316116',
         rewarded: 'ca-app-pub-6411535997477460/4459871090',
         banner: 'ca-app-pub-6411535997477460/6732407100',
       },
