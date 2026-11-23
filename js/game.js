@@ -19,7 +19,7 @@
     if (q.get('seed') !== null) SEED = parseInt(q.get('seed'), 10) || 0;
   }
   // web-only:end
-  // Android アプリ（Capacitor）で動いているか。Web 版では Capacitor がないので何もしない
+  // Android / iOS アプリ（Capacitor）で動いているか。Web 版では Capacitor がないので何もしない
   const NATIVE = !!(window.Capacitor && window.Capacitor.isNativePlatform && window.Capacitor.isNativePlatform());
   const plugin = (name) => (NATIVE && window.Capacitor.Plugins ? window.Capacitor.Plugins[name] : null);
   const Ads = window.Ads;
@@ -941,8 +941,8 @@
     suspend: () => { if (Sound.ctx) Sound.ctx.suspend(); },
     resume: () => { if (Sound.ctx && !document.hidden) Sound.ctx.resume(); },
   });
-  // Android の戻るボタン：プレイ中はポーズ（ポーズ中なら再開）、タイトル・結果画面ではアプリを閉じる
-  if (plugin('App')) {
+  // Android の戻るボタン：プレイ中はポーズ（ポーズ中なら再開）、タイトル・結果画面ではアプリを閉じる（iOS には戻るボタンがない）
+  if (plugin('App') && window.Capacitor.getPlatform() === 'android') {
     plugin('App').addListener('backButton', () => {
       if (!$('modal').classList.contains('hidden')) {
         const btns = $('modal-box').querySelectorAll('[data-i]');

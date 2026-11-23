@@ -337,7 +337,7 @@ button { font-family: var(--font); cursor: pointer; border: none; color: inherit
 .hud { background: linear-gradient(180deg, rgba(40, 8, 60, 0.9), rgba(20, 6, 40, 0.85)); border-color: rgba(255, 150, 210, 0.6); box-shadow: 0 0 18px rgba(255, 60, 160, 0.35); }
 .mode { font-size: calc(13 * var(--u)); letter-spacing: -0.1em; }
 
-/* ---------- アプリ版（Android）：法的表記・もみ消し・バナーの余白 ---------- */
+/* ---------- アプリ版（Android / iOS）：法的表記・もみ消し・バナーの余白 ---------- */
 .legal { position: absolute; left: 0; right: 0; bottom: calc(6 * var(--u)); text-align: center; font-size: calc(10 * var(--u)); color: #bbb; }
 .legal a { color: #ffd0ea; }
 .legal span { margin: 0 calc(4 * var(--u)); }

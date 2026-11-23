@@ -10,12 +10,14 @@ const root = path.join(__dirname, '..');
 const out = path.join(root, 'www');
 fs.rmSync(out, { recursive: true, force: true });
 fs.mkdirSync(out);
-for (const item of ['index.html', 'css', 'js', 'icon.svg', 'manifest.webmanifest']) {
+const APP = process.env.APP_BUILD === '1';
+// ブラウザ用のファイル（ホーム画面に追加するためのマニフェストとアイコン）は Web 版だけ
+const items = ['index.html', 'css', 'js', ...(APP ? [] : ['icon.svg', 'manifest.webmanifest'])];
+for (const item of items) {
   const src = path.join(root, item);
   if (fs.existsSync(src)) fs.cpSync(src, path.join(out, item), { recursive: true });
 }
 
-const APP = process.env.APP_BUILD === '1';
 if (APP) {
   const strip = {
     '.html': /[ \t]*<!-- web-only -->[\s\S]*?<!-- \/web-only -->[ \t]*\n?/g,
