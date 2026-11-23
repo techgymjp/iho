@@ -27,7 +27,7 @@ window.Ads = (() => {
       // 本番の広告ユニット（AdMob の iOS アプリ「摘発カウントダウン」）
       production: {
         interstitial: 'ca-app-pub-6411535997477460/8410239299',
-        rewarded: 'ca-app-pub-6411535997477460/6999629283',
+        rewarded: 'ca-app-pub-6411535997477460/3847131572',
         banner: 'ca-app-pub-6411535997477460/2227974327',
       },
     },
