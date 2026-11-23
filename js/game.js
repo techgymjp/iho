@@ -108,6 +108,52 @@
     coin(p = 0) { this.tone(988 + p * 120, 0.06, 'square', 0.05); this.tone(1319 + p * 160, 0.14, 'square', 0.05, 0.05); },
     pour() { this.tone(500, 0.12, 'sine', 0.06, 0, 900); },
     tower() { [784, 988, 1175, 1568, 1976].forEach((f, i) => this.tone(f, 0.18, 'triangle', 0.08, i * 0.07)); },
+    // ---------- シャンパンタワーの効果音 ----------
+    // 長さを指定できるノイズ（泡・歓声・拍手用。ループさせるので 1 秒より長くてもよい）
+    noiseLong(dur, vol, when, type, freq, q = 1, attack = 0.05) {
+      if (!this.on || !this.ctx) return;
+      this.ensureNoise();
+      const a = this.ctx, t = a.currentTime + when;
+      const src = a.createBufferSource(), f = a.createBiquadFilter(), g = a.createGain();
+      src.buffer = this.noiseBuf; src.loop = true;
+      f.type = type; f.frequency.value = freq; f.Q.value = q;
+      g.gain.setValueAtTime(0.0001, t); g.gain.exponentialRampToValueAtTime(vol, t + attack);
+      g.gain.setValueAtTime(vol, t + Math.max(attack, dur - 0.25)); g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+      src.connect(f).connect(g).connect(a.destination); src.start(t, Math.random() * 0.8); src.stop(t + dur + 0.05);
+    },
+    // コルクを抜く「ポンッ！」＋あふれる泡
+    cork() {
+      this.noise(0.03, 0.5, 0, 1800);                 // パンッ
+      this.tone(950, 0.09, 'sine', 0.18, 0, 260);     // ポン（音程が下がる）
+      this.tone(480, 0.12, 'triangle', 0.08, 0.01, 180);
+      this.noiseLong(0.6, 0.05, 0.05, 'highpass', 5500, 0.7, 0.02); // シュワッ
+    },
+    // 注いでいる間：トクトクトク…と、シュワシュワした泡
+    pourTower(dur) {
+      for (let i = 0, t = 0; t < dur; i++, t += 0.11 + Math.random() * 0.05) {
+        const f = 230 + Math.random() * 60;
+        this.tone(f, 0.07, 'sine', 0.07, t, f * 1.7);  // トク
+      }
+      this.noiseLong(dur + 0.3, 0.045, 0, 'bandpass', 4800, 0.8, 0.15); // シュワシュワ
+      this.noiseLong(dur, 0.02, 0, 'lowpass', 600, 0.7, 0.2);           // 流れる音
+    },
+    // 段が満ちるたびのグラスの「チリン♪」（段ごとに少しずつ高く）
+    clink(k) {
+      const f = 2350 * Math.pow(2, k / 6);
+      this.bellStrike(f, 0, 0.6, 0.045);
+      this.bellStrike(f * 1.26, 0.06, 0.5, 0.03);
+    },
+    // 全部満ちたとき：華やかなファンファーレ
+    towerFanfare() {
+      [[523, 0], [659, 0.09], [784, 0.18], [1047, 0.27]].forEach(([f, w]) => this.tone(f, 0.22, 'triangle', 0.09, w));
+      [1047, 1319, 1568, 2093].forEach((f) => { this.tone(f, 1.1, 'triangle', 0.05, 0.4); this.tone(f * 2, 0.5, 'sine', 0.012, 0.4); });
+      for (let i = 0; i < 6; i++) this.bellStrike(3000 + Math.random() * 1500, 0.4 + i * 0.09, 0.4, 0.02); // キラキラ
+    },
+    // お客さんの「わーっ！」という歓声と拍手
+    cheer() {
+      [700, 1100, 1600].forEach((f, i) => this.noiseLong(1.6, 0.05 - i * 0.01, 0.35, 'bandpass', f, 1.6, 0.35)); // わーっ
+      for (let i = 0; i < 26; i++) this.noise(0.03, 0.12 + Math.random() * 0.1, 0.4 + Math.random() * 1.5, 1500 + Math.random() * 2000); // パチパチ
+    },
     whoosh() { this.tone(900, 0.12, 'sine', 0.06, 0, 300); },
     notify() { this.tone(880, 0.1, 'sine', 0.08); this.tone(660, 0.16, 'sine', 0.08, 0.1); },
     fanfare() { [523, 659, 784, 1047].forEach((f, i) => this.tone(f, 0.16, 'triangle', 0.09, i * 0.09)); },
@@ -410,7 +456,7 @@
     b.cheer = 0.4;
     if (b.drinks >= C.drinks.length) {
       // シャンパンタワー：カウンターにグラスのピラミッドが出て、上から注がれていく
-      G.stats.towers++; Sound.tower(); G.shake = 0.15;
+      G.stats.towers++; Sound.cork(); G.shake = 0.15;
       b.tower = { t: 0, flashed: false };
       b.leaving = TOWER_SHOW;
       b.stay = Math.max(b.stay, TOWER_SHOW + 0.6);
@@ -616,9 +662,11 @@
       if (b.cheer > 0) b.cheer -= dt;
       if (b.tower) {
         const tw = b.tower; tw.t += dt;
-        if (tw.t >= TOWER_POUR && !tw.poured) { tw.poured = true; Sound.pour(); }
+        if (tw.t >= TOWER_POUR && !tw.poured) { tw.poured = true; Sound.pourTower(TOWER_FULL - TOWER_POUR); }
+        tw.clinks = tw.clinks || 0; // 段が満ちるたびにグラスが鳴る
+        while (tw.clinks < 4 && tw.t >= TOWER_POUR + tw.clinks * TOWER_TIER + TOWER_FILL) Sound.clink(tw.clinks++);
         if (tw.t >= TOWER_FULL && !tw.flashed) {
-          tw.flashed = true; G.goldFlash = 1; G.shake = 0.2; Sound.fanfare();
+          tw.flashed = true; G.goldFlash = 1; G.shake = 0.2; Sound.towerFanfare(); Sound.cheer();
           burst('🥂', PAIR_X[i], 290, 1.6);
           for (let k = 0; k < 8; k++) burst('✨', PAIR_X[i] + (vrand() - 0.5) * 110, 300 + (vrand() - 0.5) * 70, 0.7);
         }
@@ -1345,7 +1393,7 @@
   // web-only:start
   // テスト・撮影用のフック（Web 版だけ。アプリ用のビルドでは取り除く）
   window.__game = {
-    get state() { return state; }, get G() { return G; }, tapCast, tapCustomer, startGame, Music, showRedo,
+    get state() { return state; }, get G() { return G; }, tapCast, tapCustomer, startGame, Music, Sound, showRedo,
     // 難易度のシミュレーション用：画面を描かずにゲームを進める
     step: (dt) => update(dt), setSeed: (n) => { SEED = n; },
   };
