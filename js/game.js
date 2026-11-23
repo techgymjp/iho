@@ -302,7 +302,7 @@
       elapsed: 0, min: 0, sales: 0, customers: 0, heat: 0,
       seats: Array(C.seats).fill(null),   // 着席中の客
       casts: Array(C.seats).fill(null),   // その客と同伴のキャスト
-      walkers: [], popups: [], particles: [], fx: [], alertT: 0, heatFlash: 0,
+      walkers: [], popups: [], particles: [], fx: [], alertT: 0, heatFlash: 0, goldFlash: 0,
       spawnT: 0.6, buzzLeft: 0, vipNext: 0, vipCount: 0,
       visit: null, visitT: rand(...C.firstVisitSeconds),
       // 立入調査の予定（ゲーム内の経過分）
@@ -388,6 +388,10 @@
     }
   }
 
+  // シャンパンタワーの演出の時間（秒）：出てくる → 上から注ぐ → 全部満ちたら金色に光る → 帰るまで飾っておく
+  const TOWER_POP = 0.35, TOWER_POUR = 0.4, TOWER_TIER = 0.38, TOWER_FILL = 0.5, TOWER_SHOW = 3.6;
+  const TOWER_FULL = TOWER_POUR + 3 * TOWER_TIER + TOWER_FILL; // 一番下の段が満ちる時刻
+
   // ---------- お酒（隣にキャストがいる時だけ。飲み終わったら、またタップでおかわり）
   function tapCustomer(i) {
     if (state !== STATE.playing || G.paused) return;
@@ -405,9 +409,12 @@
     burst(d[0], PAIR_X[i] - 12, 372, 0.6 + b.drinks * 0.12);
     b.cheer = 0.4;
     if (b.drinks >= C.drinks.length) {
+      // シャンパンタワー：カウンターにグラスのピラミッドが出て、上から注がれていく
       G.stats.towers++; Sound.tower(); G.shake = 0.15;
-      b.leaving = b.drinking + 0.5;
-      burst('🥂', PAIR_X[i], 330, 1.5); for (let k = 0; k < 6; k++) burst('✨', PAIR_X[i] + (vrand() - 0.5) * 60, 330 + (vrand() - 0.5) * 40, 0.6);
+      b.tower = { t: 0, flashed: false };
+      b.leaving = TOWER_SHOW;
+      b.stay = Math.max(b.stay, TOWER_SHOW + 0.6);
+      for (let k = 0; k < 6; k++) burst('✨', PAIR_X[i] + (vrand() - 0.5) * 70, 300 + (vrand() - 0.5) * 40, 0.6);
     } else { Sound.pour(); Sound.coin(b.drinks); }
   }
 
@@ -607,6 +614,15 @@
         return;
       }
       if (b.cheer > 0) b.cheer -= dt;
+      if (b.tower) {
+        const tw = b.tower; tw.t += dt;
+        if (tw.t >= TOWER_POUR && !tw.poured) { tw.poured = true; Sound.pour(); }
+        if (tw.t >= TOWER_FULL && !tw.flashed) {
+          tw.flashed = true; G.goldFlash = 1; G.shake = 0.2; Sound.fanfare();
+          burst('🥂', PAIR_X[i], 290, 1.6);
+          for (let k = 0; k < 8; k++) burst('✨', PAIR_X[i] + (vrand() - 0.5) * 110, 300 + (vrand() - 0.5) * 70, 0.7);
+        }
+      }
       if (b.drinking > 0) b.drinking -= dt;
       if (b.leaving > 0) { b.leaving -= dt; if (b.leaving <= 0) b.stay = 0; }
       if ((b.stay -= dt) <= 0) pairLeaves(i);
@@ -649,6 +665,7 @@
     G.particles = G.particles.filter((p) => p.life > 0);
     if (G.shake > 0) G.shake -= dt;
     if (G.flash > 0) G.flash -= dt * 0.8;
+    if (G.goldFlash > 0) G.goldFlash -= dt * 1.2;
     if (G.doorT > 0) G.doorT -= dt;
   }
 
@@ -991,12 +1008,86 @@
     }
   }
 
+  // ---------- シャンパンタワー（クーペグラス 4 段・10 個）
+  function drawCoupe(x, rim, fill) {
+    const w = 6.6, d = 5;
+    const bowl = () => { ctx.beginPath(); ctx.moveTo(x - w, rim); ctx.quadraticCurveTo(x - w * 0.7, rim + d * 1.15, x, rim + d); ctx.quadraticCurveTo(x + w * 0.7, rim + d * 1.15, x + w, rim); ctx.closePath(); };
+    // 脚と台
+    ctx.strokeStyle = 'rgba(230,245,255,0.85)'; ctx.lineWidth = 1.1;
+    ctx.beginPath(); ctx.moveTo(x, rim + d); ctx.lineTo(x, rim + d + 5); ctx.stroke();
+    ctx.fillStyle = 'rgba(230,245,255,0.8)'; ctx.beginPath(); ctx.ellipse(x, rim + d + 5.4, 3.6, 1, 0, 0, Math.PI * 2); ctx.fill();
+    // 器
+    bowl(); ctx.fillStyle = 'rgba(210,235,255,0.28)'; ctx.fill();
+    if (fill > 0) { // 注がれたシャンパン（下から満ちる）
+      ctx.save(); bowl(); ctx.clip();
+      const top = rim + d - (d + 1) * Math.min(1, fill);
+      const g = ctx.createLinearGradient(0, top, 0, rim + d); g.addColorStop(0, '#fff3b0'); g.addColorStop(1, '#f2b632');
+      ctx.fillStyle = g; ctx.fillRect(x - w, top, w * 2, rim + d - top + 1);
+      ctx.restore();
+    }
+    bowl(); ctx.strokeStyle = 'rgba(255,255,255,0.85)'; ctx.lineWidth = 0.9; ctx.stroke();
+    ctx.fillStyle = 'rgba(255,255,255,0.7)'; ctx.fillRect(x - w + 1.5, rim + 0.6, 2.2, 0.9); // つや
+  }
+  function drawTower(cx, tw) {
+    const base = COUNTER_TOP - 6, step = 11;
+    const pop = Math.min(1, tw.t / TOWER_POP), sc = (0.6 + 0.4 * easeInOut(pop)) * 1.5; // 見せ場なので大きめに
+    const rimOf = (k) => base - 11 - (3 - k) * step;                // k = 0（一番上）〜 3（一番下）
+    const fillOf = (k) => clamp((tw.t - TOWER_POUR - k * TOWER_TIER) / TOWER_FILL, 0, 1);
+    const full = fillOf(3);
+    ctx.save();
+    ctx.translate(cx, base); ctx.scale(sc, sc); ctx.translate(-cx, -base);
+    ctx.globalAlpha = pop;
+    // 後ろの金色の光
+    const gl = ctx.createRadialGradient(cx, base - 26, 4, cx, base - 26, 60);
+    gl.addColorStop(0, `rgba(255,215,120,${0.15 + 0.35 * full})`); gl.addColorStop(1, 'rgba(255,215,120,0)');
+    ctx.fillStyle = gl; ctx.fillRect(cx - 60, base - 90, 120, 100);
+    // グラス（下の段から描く）
+    for (let k = 3; k >= 0; k--) for (let j = 0; j <= k; j++) drawCoupe(cx + (j - k / 2) * 13.2, rimOf(k), fillOf(k));
+    // あふれて下の段へ流れ落ちるシャンパン
+    ctx.strokeStyle = 'rgba(255,214,90,0.9)'; ctx.lineWidth = 1.3;
+    for (let k = 0; k < 3; k++) {
+      if (fillOf(k) < 0.95 || fillOf(k + 1) >= 1) continue;
+      for (let j = 0; j <= k; j++) {
+        const gx = cx + (j - k / 2) * 13.2;
+        [-1, 1].forEach((sd) => { ctx.beginPath(); ctx.moveTo(gx + sd * 6.6, rimOf(k)); ctx.lineTo(gx + sd * 6.6, rimOf(k + 1) + 2); ctx.stroke(); });
+      }
+    }
+    // ボトルから注ぐ
+    if (tw.t >= TOWER_POUR && tw.t < TOWER_FULL) {
+      const bx = cx + 10, by = rimOf(0) - 17;
+      ctx.strokeStyle = 'rgba(255,214,90,0.95)'; ctx.lineWidth = 1.6;
+      ctx.beginPath(); ctx.moveTo(bx - 7, by + 4); ctx.quadraticCurveTo(cx - 1, by + 6, cx, rimOf(0) + 2); ctx.stroke();
+      ctx.save(); ctx.translate(bx, by); ctx.rotate(-2.1);
+      ctx.fillStyle = '#1f5a34'; rr(-3.5, -4, 16, 8, 3); ctx.fill();            // 胴
+      ctx.fillRect(-9, -1.8, 6, 3.6);                                            // 首
+      ctx.fillStyle = '#e8c35a'; ctx.fillRect(-10.5, -2, 3, 4);                  // 金の口
+      ctx.fillStyle = '#f4e7c8'; ctx.fillRect(2, -3, 5, 6);                      // ラベル
+      ctx.restore();
+    }
+    // 立ちのぼる泡
+    ctx.fillStyle = 'rgba(255,250,220,0.85)';
+    for (let k = 0; k <= 3; k++) {
+      if (fillOf(k) < 0.4) continue;
+      for (let j = 0; j <= k; j++) {
+        const gx = cx + (j - k / 2) * 13.2;
+        for (let n = 0; n < 2; n++) {
+          const ph = (T * 0.9 + j * 0.37 + k * 0.21 + n * 0.5) % 1;
+          ctx.globalAlpha = pop * (1 - ph);
+          ctx.beginPath(); ctx.arc(gx + (n ? 2 : -2) + Math.sin(T * 6 + j) * 0.8, rimOf(k) + 2 - ph * 10, 0.8, 0, Math.PI * 2); ctx.fill();
+        }
+      }
+    }
+    ctx.restore();
+    if (full >= 1) Art.sparkle(ctx, cx + Math.sin(T * 2) * 18, rimOf(0) - 8 + Math.cos(T * 3) * 6, 3 + Math.sin(T * 7) * 1.5, 0.9, '#fff3b0');
+  }
+
   function drawPair(i) {
     const cx = PAIR_X[i], b = G && G.seats[i], cast = G && G.casts[i];
     const seated = b && b.enterT >= 1;
     const withCast = cast && cast.state === 'box';
     const ux = cx + CUST_DX;
-    if (seated && b.drinks) {
+    if (seated && b.tower) drawTower(cx, b.tower);
+    else if (seated && b.drinks) {
       const icons = C.drinks.slice(0, Math.min(b.drinks, C.drinks.length)).map((d) => d[0]).join('');
       ctx.save(); ctx.globalAlpha = 0.55; ctx.font = `10px ${FONT}`; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
       ctx.fillText(icons, cx, COUNTER_TOP - 12); ctx.restore();
@@ -1198,6 +1289,11 @@
       });
       if ((v && v.phase === 'look') || (bustNow && G.bustT > 1.5)) {
         ctx.fillStyle = Math.floor(T * 5) % 2 ? 'rgba(255,30,60,0.12)' : 'rgba(30,90,255,0.12)'; ctx.fillRect(0, -OY, W, VH);
+      }
+      if (G.goldFlash > 0) {
+        const gg = ctx.createRadialGradient(180, 330, 20, 180, 330, 420);
+        gg.addColorStop(0, `rgba(255,225,140,${0.55 * G.goldFlash})`); gg.addColorStop(1, `rgba(255,180,60,${0.15 * G.goldFlash})`);
+        ctx.fillStyle = gg; ctx.fillRect(0, -OY, W, VH);
       }
       if (G.flash > 0 && (!bustNow || G.bustT > 1.5)) { ctx.fillStyle = `rgba(255,255,255,${G.flash * 0.6})`; ctx.fillRect(0, -OY, W, VH); }
       if (bustNow && G.bustT > 1.5) {
