@@ -119,30 +119,35 @@ Google の「Apple の App Store のデータ開示要件への準備」（AdMob
 - ユーザーに関連付け：しない
 - トラッキングに使用：デバイス ID と広告データは「する」
 
-**審査へのメモ（App Review に関する情報の「メモ」に貼る。`techgymjp/jet-fighter` の `docs/ANDROID_PORTING.md` 7-6 のひな形どおり。初回に「Guideline 2.1 - Information Needed」が来たら、同じ文を返信する）**
+**審査へのメモ（App Review に関する情報の「メモ」に貼る。`techgymjp/jet-fighter` の `docs/ANDROID_PORTING.md` 7-6 のひな形どおり。メモ欄は 4,000 文字までなので、その中に収めてある（約 3740 文字）。初回に「Guideline 2.1 - Information Needed」が来たら、同じ文を返信する）**
 
 ```
-1. Purpose and audience: Raid Countdown (摘発カウントダウン) is a free one-tap casual game for adults. The player runs a fictional bar for one night (a 3-minute round): tap guests to serve drinks, and when the door chimes and a police officer walks in, tap the hostesses to hide them behind the counter before the officer questions them. The goal is to keep the bar open until 5 AM and earn as much as possible.
+1. Purpose and audience: Raid Countdown (摘発カウントダウン) is a free one-tap casual game for adults. In a fictional bar, tap guests to serve drinks; when the door chimes and a police officer walks in, tap the hostesses to hide them behind the counter before the officer questions them. Keep the bar open until 5 AM (a 3-minute round).
 
-2. How to use: No login or account is needed. Tap "START" on the title screen (a short "How to play" screen appears the first time). During play, tap a seated guest to serve a drink and tap a hostess to send her behind the counter (tap her again later to return). The pause button is at the top right. The game is in Japanese and English (it follows the device language and can be switched on the title screen).
+2. How to use: No login or account. Tap "START" on the title screen (a short "How to play" screen appears the first time). Tap a seated guest to serve a drink; tap a hostess to send her behind the counter (tap again later to return her). Pause button at the top right. Japanese and English (follows the device language; switchable on the title screen).
 
-3. External services: Google AdMob (banner, interstitial and rewarded ads) with Google's consent form (UMP) and App Tracking Transparency. Rewarded ads are optional: when the player gets busted, the player can watch one to "cover it up" and keep playing (once per game). The share button uses the iOS share sheet. No other services or in-app purchases.
+3. External services: Google AdMob (banner, interstitial and rewarded ads) with Google's consent form (UMP) and App Tracking Transparency, and the iOS share sheet. No other services or in-app purchases.
 
 4. Regional differences: None, except that the ad consent form appears only where required (e.g. EEA/UK).
 
-5. Regulated content / third-party material: The game is not in a regulated industry and contains no gambling, no violence and no sexual content. It is a comedic, fictional story set in a fictional nightlife district; the characters wear dresses and only sit and talk with guests. It does not encourage running an unlicensed business or drinking: the title screen, the "How to play" screen and the results screen state that the game is fiction and that running such a business without a license is illegal in real life. All graphics and sounds are original: the characters and the bar are drawn in code, and the music and sound effects are synthesized in real time. There is no third-party content.
+5. Regulated content / third-party material: Not a regulated industry; no gambling, violence or sexual content. A comedic, fictional story in a fictional district: the characters wear dresses and only sit and talk with guests. It does not encourage drinking or running an unlicensed business; the title, "How to play" and results screens state that it is fiction and that such a business is illegal in real life. All graphics and sounds are original (characters and the bar drawn in code, music and sounds synthesized in real time). No third-party content.
 
-6. Originality (Guideline 4.3): Raid Countdown is an original app that we designed and built ourselves. It does not copy or imitate any other app, and it is not made from a template, a purchased source code or a re-skin of another game. All character illustrations, the bar scene, the music and the sound effects were created specifically for this app. It is also not a template-based variation of our other apps. Each of our games has its own game system that we designed and programmed individually for that title, and we do not reuse a game template from one app to make another, even when two of our games are in the same genre. This game's system (guests who arrive with a hostess and sit side by side at the counter; drink orders that escalate up to a champagne tower; the door chime shared by guests and police; the suspicion meter; and police officers who look around, walk up to a hostess and question her) was built only for this title, and its gameplay, content and visuals are its own. Only standard technical parts, such as the Capacitor app shell and the AdMob ad integration, are shared across our apps. We publish this game as a single app with one Bundle ID; there are no other versions of it on the App Store (for example, no separate free and paid editions or regional copies).
+6. Originality (Guideline 4.3): Raid Countdown is not spam, a re-skin or a repackaged template.
+- We designed and programmed it ourselves for this app. It does not copy any other app and was not made from a template, an app generator or purchased code. Its characters, bar scene, music and sounds are not used in our other apps.
+- Our other apps are different games, each with its own genre, rules, controls and content, built separately. None can be turned into another by swapping images or text.
+- Only Raid Countdown has: guests arriving with a hostess and sitting side by side at the bar; drinks that escalate to a champagne tower; one door chime shared by guests and police; a suspicion meter; officers who walk up to a hostess and question her.
+- Shared parts are only standard infrastructure used by many unrelated apps (Capacitor app shell, Google Mobile Ads SDK, build scripts). Binaries may look similar technically, but the games are different.
+- One app, one Bundle ID: no other versions (free/paid, regional or re-skinned) and no other accounts.
+- If one of our apps seems too similar, please tell us which one. We can provide gameplay videos or source code.
 
-7. App functionality (Guideline 4.2): The app is not a website wrapper. All game content (code, illustrations, music, sounds and texts) is bundled in the app and fully playable offline (only ads and sharing need a connection). It also uses native iOS features such as the share sheet and App Tracking Transparency.
+7. App functionality (Guideline 4.2): Not a website wrapper. All content is bundled and playable offline (only ads and sharing need a connection). Uses native iOS features (share sheet, App Tracking Transparency).
 
-8. Features that appear only in some situations (Guideline 5.6): The app has no hidden, dormant or remotely enabled features. It behaves the same during review as for all users, and it does not download or run code from the internet. These parts appear only under certain conditions:
-- "Watch an ad to cover it up" screen: appears when the player gets busted, once per game, only if a rewarded ad could be loaded. Watching the ad lets the player keep playing; "Results" (or waiting a few seconds) goes to the results screen.
-- Interstitial ad: shown when starting a game, on "Retry" and "Title" on the results screen, and on "Resume" and "Title" on the pause screen.
-- Banner ad: shown at the bottom of the title, how-to-play, pause and results screens only (never during play).
-- "Ad settings" link on the title screen: appears only where Google's consent form is required (e.g. EEA/UK) and reopens that form.
-- Language buttons (日本語 / English) on the title screen switch the language at any time.
-- Switching to another app (or an incoming call) pauses the game.
+8. Conditional features (Guideline 5.6): No hidden, dormant or remotely enabled features; the app behaves the same during review and downloads no code. Parts that appear only in some situations:
+- "Watch an ad to cover it up" screen: when the player gets busted, once per game, if a rewarded ad loaded (watch to keep playing, or "Results").
+- Interstitial ad: on starting a game, "Retry"/"Title" on the results screen, and "Resume"/"Title" on the pause screen.
+- Banner ad: bottom of the title, how-to-play, pause and results screens only, never during play.
+- "Ad settings" link: only where Google's consent form is required (e.g. EEA/UK).
+- Language buttons switch Japanese/English; switching apps pauses the game.
 The app contains no debug menu, no test switches and no links to other app stores.
 ```
 
