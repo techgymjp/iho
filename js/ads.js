@@ -3,14 +3,18 @@
 // 構成は techgymjp/jackal の ads.js と同じ。リワード・インタースティシャル・バナーを使う
 window.Ads = (() => {
   // 空の種類は本番ビルド(ストア用)では出さない
+  // アプリ用のビルドでは、ほかの OS の広告 ID と、ストア用ならテスト用の広告 ID を取り除く（scripts/build-web.js）
   const UNITS = {
+    // platform:android:start
     android: {
+      // ads:test:start
       // Google 公式のテスト用広告ユニット
       test: {
         interstitial: 'ca-app-pub-3940256099942544/1033173712',
         rewarded: 'ca-app-pub-3940256099942544/5224354917',
         banner: 'ca-app-pub-3940256099942544/6300978111',
       },
+      // ads:test:end
       // 本番の広告ユニット（AdMob の Android アプリ「摘発カウントダウン」）
       production: {
         interstitial: 'ca-app-pub-6411535997477460/4206316116',
@@ -18,12 +22,16 @@ window.Ads = (() => {
         banner: 'ca-app-pub-6411535997477460/6732407100',
       },
     },
+    // platform:android:end
+    // platform:ios:start
     ios: {
+      // ads:test:start
       test: {
         interstitial: 'ca-app-pub-3940256099942544/4411468910',
         rewarded: 'ca-app-pub-3940256099942544/1712485313',
         banner: 'ca-app-pub-3940256099942544/2934735716',
       },
+      // ads:test:end
       // 本番の広告ユニット（AdMob の iOS アプリ「摘発カウントダウン」）
       production: {
         interstitial: 'ca-app-pub-6411535997477460/8410239299',
@@ -31,6 +39,7 @@ window.Ads = (() => {
         banner: 'ca-app-pub-6411535997477460/2227974327',
       },
     },
+    // platform:ios:end
   };
   const RETRY_MS = 20000;      // 読み込みに失敗したら少し待って再挑戦する
   const cap = window.Capacitor;
@@ -38,7 +47,7 @@ window.Ads = (() => {
   let AdMob = native && cap.Plugins ? cap.Plugins.AdMob : null;
   const platform = native && cap.getPlatform && cap.getPlatform() === 'ios' ? 'ios' : 'android';
   const testing = window.AD_MODE !== 'production';
-  const ids = UNITS[platform][testing ? 'test' : 'production'];
+  const ids = (UNITS[platform] && UNITS[platform][testing ? 'test' : 'production']) || {};
   // 広告ユニット ID がある種類だけ使う(1 つもなければ広告を使わない)
   const has = (kind) => !!ids[kind];
   if (!has('interstitial') && !has('rewarded') && !has('banner')) AdMob = null;
@@ -176,10 +185,11 @@ window.Ads = (() => {
     if (again !== banner.state && !(again === 'hidden' && banner.state === 'none')) syncBanner();
   }
 
-  // 同意した内容をあとから変更するための Google のフォームを開く
-  function showPrivacyOptions() {
-    if (!AdMob) return Promise.resolve();
-    return AdMob.showPrivacyOptionsForm().catch(() => {});
+  // 同意した内容をあとから変更するための Google のフォームを開く。
+  // 同意が必要ない地域ではフォームがないので false を返す（呼び出し側で「設定は不要」と表示する）
+  async function showPrivacyOptions() {
+    if (!AdMob || !privacyRequired) return false;
+    try { await AdMob.showPrivacyOptionsForm(); return true; } catch (e) { return false; }
   }
 
   const initDone = AdMob ? init() : Promise.resolve();

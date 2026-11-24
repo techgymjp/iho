@@ -592,6 +592,11 @@
     if (redoBusy) return;
     redoBusy = true; $('redo-watch').disabled = true; $('redo-watch').textContent = t('redo.loading');
     const result = await Ads.showRewarded();
+    if (result === 'unavailable') { // 広告を読み込めなかったときは、そう知らせてから結果へ
+      $('redo-watch').textContent = t('redo.unavailable');
+      setTimeout(() => closeRedo(true), 1800);
+      return;
+    }
     if (result !== 'rewarded') { closeRedo(true); return; }
     closeRedo(false);
     // 摘発をなかったことにして、そのまま営業を続ける
@@ -941,7 +946,8 @@
     suspend: () => { if (Sound.ctx) Sound.ctx.suspend(); },
     resume: () => { if (Sound.ctx && !document.hidden) Sound.ctx.resume(); },
   });
-  // Android の戻るボタン：プレイ中はポーズ（ポーズ中なら再開）、タイトル・結果画面ではアプリを閉じる（iOS には戻るボタンがない）
+  // platform:android:start
+  // Android の戻るボタン：プレイ中はポーズ（ポーズ中なら再開）、タイトル・結果画面ではアプリを閉じる（iOS 用のビルドには入らない）
   if (plugin('App') && window.Capacitor.getPlatform() === 'android') {
     plugin('App').addListener('backButton', () => {
       if (!$('modal').classList.contains('hidden')) {
@@ -953,13 +959,18 @@
       else if (state === STATE.playing) pause();
     });
   }
+  // platform:android:end
   // タイトル画面の下に、バージョン・プライバシーポリシー・広告の設定（EU など）を出す（アプリのみ）
   if (NATIVE) {
     $('legal').classList.remove('hidden');
     document.body.classList.add('native');
     if (window.APP_VERSION && window.APP_VERSION !== 'dev') $('build-info').textContent = window.APP_VERSION;
-    Ads.initDone.then(() => { if (Ads.privacyOptionsRequired) $('ad-privacy').classList.remove('hidden'); });
-    $('ad-privacy-link').addEventListener('click', (e) => { e.preventDefault(); Ads.showPrivacyOptions(); });
+    // 「広告の設定」はどの地域でも表示する（同意が必要ない地域では、その旨を表示する）
+    $('ad-privacy').classList.remove('hidden');
+    $('ad-privacy-link').addEventListener('click', async (e) => {
+      e.preventDefault();
+      if (!(await Ads.showPrivacyOptions())) modal(`<p>${t('legal.adSettingsNone')}</p>`, [{ label: 'OK' }]);
+    });
   }
 
   // ---------------------------------------------------------------- rendering

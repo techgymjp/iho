@@ -119,18 +119,18 @@ Google の「Apple の App Store のデータ開示要件への準備」（AdMob
 - ユーザーに関連付け：しない
 - トラッキングに使用：デバイス ID と広告データは「する」
 
-**審査へのメモ（App Review に関する情報の「メモ」に貼る。`techgymjp/jet-fighter` の `docs/ANDROID_PORTING.md` 7-6 のひな形どおり。メモ欄は 4,000 文字までなので、その中に収めてある（約 3740 文字）。初回に「Guideline 2.1 - Information Needed」が来たら、同じ文を返信する）**
+**審査へのメモ（App Review に関する情報の「メモ」に貼る。`techgymjp/jet-fighter` の `docs/ANDROID_PORTING.md` 7-6 のひな形どおり。メモ欄は 4,000 文字までなので、その中に収めてある（約 3987 文字）。初回に「Guideline 2.1 - Information Needed」が来たら、同じ文を返信する）**
 
 ```
-1. Purpose and audience: Raid Countdown (摘発カウントダウン) is a free one-tap casual game for adults. In a fictional bar, tap guests to serve drinks; when the door chimes and a police officer walks in, tap the hostesses to hide them behind the counter before the officer questions them. Keep the bar open until 5 AM (a 3-minute round).
+1. Purpose and audience: Raid Countdown (摘発カウントダウン) is a free one-tap casual game for adults. In a fictional bar, tap guests to serve drinks; when the door chimes and a police officer walks in, tap the hostesses to hide them behind the counter before the officer questions them. Keep the bar open until 5 AM (3 minutes).
 
-2. How to use: No login or account. Tap "START" on the title screen (a short "How to play" screen appears the first time). Tap a seated guest to serve a drink; tap a hostess to send her behind the counter (tap again later to return her). Pause button at the top right. Japanese and English (follows the device language; switchable on the title screen).
+2. How to use: No login or account. Tap "START" on the title screen ("How to play" appears the first time). Tap a seated guest to serve a drink; tap a hostess to send her behind the counter (tap again later to return her). Pause button at the top right. Japanese and English (follows the device language; switchable on the title screen).
 
 3. External services: Google AdMob (banner, interstitial and rewarded ads) with Google's consent form (UMP) and App Tracking Transparency, and the iOS share sheet. No other services or in-app purchases.
 
 4. Regional differences: None, except that the ad consent form appears only where required (e.g. EEA/UK).
 
-5. Regulated content / third-party material: Not a regulated industry; no gambling, violence or sexual content. A comedic, fictional story in a fictional district: the characters wear dresses and only sit and talk with guests. It does not encourage drinking or running an unlicensed business; the title, "How to play" and results screens state that it is fiction and that such a business is illegal in real life. All graphics and sounds are original (characters and the bar drawn in code, music and sounds synthesized in real time). No third-party content.
+5. Regulated content / third-party material: Not a regulated industry; no gambling, violence or sexual content. A comedic, fictional story in a fictional district: the characters wear dresses and only sit and talk with guests. It does not encourage drinking or running an unlicensed business; the title, "How to play" and results screens state that it is fiction and that such a business is illegal in real life. All graphics and sounds are original (drawn in code; music and sounds synthesized in real time). No third-party content.
 
 6. Originality (Guideline 4.3): Raid Countdown is not spam, a re-skin or a repackaged template.
 - We designed and programmed it ourselves for this app. It does not copy any other app and was not made from a template, an app generator or purchased code. Its characters, bar scene, music and sounds are not used in our other apps.
@@ -138,16 +138,17 @@ Google の「Apple の App Store のデータ開示要件への準備」（AdMob
 - Only Raid Countdown has: guests arriving with a hostess and sitting side by side at the bar; drinks that escalate to a champagne tower; one door chime shared by guests and police; a suspicion meter; officers who walk up to a hostess and question her.
 - Shared parts are only standard infrastructure used by many unrelated apps (Capacitor app shell, Google Mobile Ads SDK, build scripts). Binaries may look similar technically, but the games are different.
 - One app, one Bundle ID: no other versions (free/paid, regional or re-skinned) and no other accounts.
-- If one of our apps seems too similar, please tell us which one. We can provide gameplay videos or source code.
+- If one of our apps seems too similar, please tell us which. We can send gameplay videos or source code.
 
 7. App functionality (Guideline 4.2): Not a website wrapper. All content is bundled and playable offline (only ads and sharing need a connection). Uses native iOS features (share sheet, App Tracking Transparency).
 
-8. Conditional features (Guideline 5.6): No hidden, dormant or remotely enabled features; the app behaves the same during review and downloads no code. Parts that appear only in some situations:
-- "Watch an ad to cover it up" screen: when the player gets busted, once per game, if a rewarded ad loaded (watch to keep playing, or "Results").
+8. Conditional features (Guideline 5.6): No hidden, dormant or remotely enabled features; same behavior during review as for all users; no downloaded code. The iOS build contains only iOS code: code for our web and Android versions and test ad IDs are removed at build time. Every screen can be reached by any user:
+- "Watch an ad to cover it up" screen: every time the player gets busted (once per game). If no ad loads, it says so and shows the results.
 - Interstitial ad: on starting a game, "Retry"/"Title" on the results screen, and "Resume"/"Title" on the pause screen.
 - Banner ad: bottom of the title, how-to-play, pause and results screens only, never during play.
-- "Ad settings" link: only where Google's consent form is required (e.g. EEA/UK).
-- Language buttons switch Japanese/English; switching apps pauses the game.
+- "Ad settings" link: always on the title screen; it opens Google's consent form where required (e.g. EEA/UK), otherwise it says no settings are needed.
+- Language buttons switch Japanese/English; leaving the app pauses the game.
+To see the busted and results screens quickly: tap START and do not tap the hostesses when an officer walks in.
 The app contains no debug menu, no test switches and no links to other app stores.
 ```
 
