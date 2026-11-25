@@ -369,3 +369,15 @@ html[lang="en"] .disclaimer { font-size: calc(8 * var(--u)); }
 .share-row { display: flex; gap: calc(8 * var(--u)); }
 .share-row .btn { flex: 1; }
 .btn-x { background: #000; color: #fff; border: 1px solid rgba(255, 255, 255, 0.45); font-size: calc(13 * var(--u)); padding: calc(7 * var(--u)); }
+
+/* ---------- タイトルのスコア欄：キャラクターの絵と重なっても読めるよう、暗い半透明の背景を敷く ---------- */
+#screen-title .best-box {
+  padding: calc(6 * var(--u)) calc(18 * var(--u)) calc(7 * var(--u));
+  border-radius: calc(14 * var(--u));
+  background: rgba(12, 4, 26, 0.72);
+  border: 1px solid rgba(255, 150, 210, 0.45);
+  box-shadow: 0 0 calc(14 * var(--u)) rgba(0, 0, 0, 0.55);
+  -webkit-backdrop-filter: blur(3px); backdrop-filter: blur(3px);
+  color: #e8dcef;
+}
+#screen-title .best-box small { color: #d6c8e0; }
